@@ -15,7 +15,7 @@ export default function Sparkline({
   values,
   width = 120,
   height = 28,
-  stroke = "#2563eb",
+  stroke = "#111827",
   labels = [],
   formatValue
 }: SparklineProps) {
@@ -39,6 +39,35 @@ export default function Sparkline({
     if (!points.length) return "";
     return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
   }, [points]);
+
+  const trendPath = useMemo(() => {
+    if (points.length < 2 || values.length < 2) return "";
+    const n = values.length;
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumXX = 0;
+    for (let i = 0; i < n; i += 1) {
+      const x = i;
+      const y = values[i];
+      sumX += x;
+      sumY += y;
+      sumXY += x * y;
+      sumXX += x * x;
+    }
+    const denominator = n * sumXX - sumX * sumX;
+    const slope = denominator === 0 ? 0 : (n * sumXY - sumX * sumY) / denominator;
+    const intercept = (sumY - slope * sumX) / n;
+    const y0 = intercept;
+    const yN = slope * (n - 1) + intercept;
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const mapY = (v: number) => height - ((v - min) / range) * height;
+
+    return `M 0 ${mapY(y0)} L ${width} ${mapY(yN)}`;
+  }, [points.length, values, width, height]);
 
   useEffect(() => {
     setHoverIndex(null);
@@ -72,6 +101,9 @@ export default function Sparkline({
     >
       <svg className="sparkline" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="sparkline">
         {path && <path d={path} fill="none" strokeWidth="2" strokeLinecap="round" stroke={stroke} />}
+        {trendPath && (
+          <path d={trendPath} fill="none" strokeWidth="1.4" strokeLinecap="round" stroke="#94a3b8" strokeDasharray="3 3" />
+        )}
         {hoverIndex !== null && points[hoverIndex] && (
           <circle cx={points[hoverIndex].x} cy={points[hoverIndex].y} r="3.5" fill={stroke} />
         )}

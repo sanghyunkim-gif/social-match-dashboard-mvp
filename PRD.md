@@ -74,7 +74,7 @@
 
 ### 7.3 조회 방식 개선
 - Heatmap 요청은 선택 지표만 조회하도록 변경
-- fallback은 `HEATMAP_ALLOW_BASE_FALLBACK=1`일 때만 허용(기본 OFF)
+- fallback은 `HEATMAP_ALLOW_BASE_FALLBACK=0`이 아닐 때 허용(기본 ON)
 - 대용량 단위(`area`, `stadium_group`, `stadium`)는 PostgREST 응답 제한(1000행) 회피를 위해 페이지네이션(`range`)으로 전체 row를 수집
 - `GET /api/filter-options`도 동일하게 페이지네이션 적용
 - `GET /api/filter-options`는 원천(`data_mart_1_social_match`) 스캔 대신 `weekly_agg_mv`(`metric_id=total_match_cnt`) 기준으로 조회
@@ -110,6 +110,20 @@
 - 테이블 첫 행 sticky:
   - 스크롤/레이아웃 충돌 이슈로 현재 비활성화
   - 후속 브랜치에서 sticky 설계 재시도 예정
+
+### 7.8 2026-03-08 데이터/UX 개선
+- 최근 1~2주 데이터 보강:
+  - `weekly_agg_mv` 최신 주차 누락 시, API 레벨에서 원천(`data_mart_1_social_match`) fallback 집계로 보강
+  - `all` 단위의 `dimension_type='all'` 미적재 케이스는 `area` 단위 집계를 기반으로 `all` 값을 재구성
+  - 주차 누락뿐 아니라 `주차+지표` 누락도 보강 대상으로 처리
+- 지표 선택 패널 개선:
+  - 상단 검색 입력 추가(지표명/ID/설명 검색)
+  - `metric_store_native`의 카테고리2/3 기반 그룹 표시
+- 결과 테이블 UX:
+  - 우상단(테이블 헤더) `증감 노출` 체크박스 추가
+  - 기본 ON, OFF 시 증감 텍스트만 숨김
+  - 증감 스파크라인 색상: 검정
+  - 추세선: 회색 점선 오버레이 추가
 
 ### 7.5 2026-02-22 장애 원인 및 조치
 - 현상:

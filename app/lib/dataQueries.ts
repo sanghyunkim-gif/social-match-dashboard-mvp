@@ -12,7 +12,18 @@ const POSTGREST_PAGE_SIZE = 1000;
 type QueryMeasureUnit = "all" | "area_group" | "area" | "stadium_group" | "stadium";
 
 type WeekEntry = { week: string; startDate: string | null };
-type MetricDictRow = { metric: string; korean_name: string; description: string | null; query: string | null };
+type MetricDictRow = {
+  metric: string;
+  korean_name: string;
+  description: string | null;
+  query: string | null;
+  category_2?: string | null;
+  category_3?: string | null;
+  category2?: string | null;
+  category3?: string | null;
+  cate2?: string | null;
+  cate3?: string | null;
+};
 type HeatmapAggRow = {
   week: string | null;
   measure_unit: string | null;
@@ -58,7 +69,7 @@ const fetchPagedRows = async <T>(buildQuery: (from: number, to: number) => any) 
 
 const isBlank = (value: unknown) => value === null || value === undefined || String(value).trim() === "";
 const isRateMetric = (metricId: string) => metricId.endsWith("_rate");
-const allowBaseFallback = process.env.HEATMAP_ALLOW_BASE_FALLBACK === "1";
+const allowBaseFallback = process.env.HEATMAP_ALLOW_BASE_FALLBACK !== "0";
 
 const metricColumnBlacklist = new Set([
   "_airbyte_raw_id",
@@ -87,6 +98,28 @@ const columnByUnit: Record<Exclude<QueryMeasureUnit, "all">, string> = {
   area: "area",
   stadium_group: "stadium_group",
   stadium: "stadium"
+};
+
+const toCategoryLabel = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  return text.length > 0 ? text : "";
+};
+
+const resolveMetricCategory = (row: MetricDictRow, depth: 2 | 3) => {
+  if (depth === 2) {
+    return (
+      toCategoryLabel(row.category_2) ||
+      toCategoryLabel(row.category2) ||
+      toCategoryLabel(row.cate2) ||
+      null
+    );
+  }
+  return (
+    toCategoryLabel(row.category_3) ||
+    toCategoryLabel(row.category3) ||
+    toCategoryLabel(row.cate3) ||
+    null
+  );
 };
 
 const buildWeekEntries = async (limit?: number) => {
@@ -168,17 +201,160 @@ const mapHeatmapRows = (rows: HeatmapAggRow[], measureUnit: QueryMeasureUnit, me
   });
 };
 
+const aggregateRowsToHeatmap = ({
+  rows,
+  measureUnit,
+  unitColumn,
+  metricIds
+}: {
+  rows: Record<string, unknown>[];
+  measureUnit: QueryMeasureUnit;
+  unitColumn: string | null;
+  metricIds: string[];
+}) => {
+  type AggState = { max: number; sum: number; count: number };
+  const accumulator = new Map<string, AggState>();
+  for (const row of rows) {
+    const week = String(row.week ?? "").trim();
+    const entity = unitColumn ? String(row[unitColumn] ?? "").trim() : ALL_LABEL;
+    if (!week || !entity) continue;
+
+    for (const metricId of metricIds) {
+      const raw = row[metricId];
+      const value = typeof raw === "number" ? raw : Number(raw ?? NaN);
+      if (!Number.isFinite(value)) continue;
+
+      const key = `${week}|${entity}|${metricId}`;
+      const prev = accumulator.get(key) ?? { max: Number.NEGATIVE_INFINITY, sum: 0, count: 0 };
+      prev.max = Math.max(prev.max, value);
+      prev.sum += value;
+      prev.count += 1;
+      accumulator.set(key, prev);
+    }
+  }
+
+  const rowsOut: HeatmapAggRow[] = [];
+  for (const [key, state] of accumulator.entries()) {
+    const [week, entity, metricId] = key.split("|");
+    const value = isRateMetric(metricId) ? state.sum / Math.max(state.count, 1) : state.max;
+    rowsOut.push({
+      week,
+      measure_unit: measureUnit,
+      filter_value: entity,
+      metric_id: metricId,
+      value
+    });
+  }
+
+  return rowsOut;
+};
+
 const getHeatmapFromBaseTable = async ({
   measureUnit,
   filterValue,
   weeks,
   metricIds
 }: {
-  measureUnit: Exclude<QueryMeasureUnit, "all">;
+  measureUnit: QueryMeasureUnit;
   filterValue: string | null;
   weeks: string[];
   metricIds: string[];
 }) => {
+  if (measureUnit === "all") {
+    const selectColumns = Array.from(new Set(["week", "dimension_type", "area", ...metricIds])).join(",");
+    const allRows = await fetchPagedRows<Record<string, unknown>>((from, to) => {
+      let query = applyBaseFilters(
+        schemaClient
+          .from(tableName(BASE_TABLE))
+          .select(selectColumns)
+          .order("week", { ascending: true })
+          .order("dimension_type", { ascending: true, nullsFirst: false })
+          .range(from, to)
+      );
+      if (weeks.length > 0) query = query.in("week", weeks);
+      return query.eq("dimension_type", "all");
+    });
+
+    const fromAll = aggregateRowsToHeatmap({
+      rows: allRows,
+      measureUnit: "all",
+      unitColumn: null,
+      metricIds
+    });
+
+    const allMetricKeySet = new Set(
+      fromAll.map((row) => `${String(row.week ?? "").trim()}|${String(row.metric_id ?? "").trim()}`)
+    );
+    const missingWeeks = weeks.filter((week) =>
+      metricIds.some((metricId) => !allMetricKeySet.has(`${week}|${metricId}`))
+    );
+    if (missingWeeks.length === 0) {
+      return fromAll;
+    }
+
+    // Latest ingestion may miss dimension_type='all'. Build "all" from area rows for missing weeks.
+    const areaRows = await fetchPagedRows<Record<string, unknown>>((from, to) => {
+      let query = applyBaseFilters(
+        schemaClient
+          .from(tableName(BASE_TABLE))
+          .select(selectColumns)
+          .order("week", { ascending: true })
+          .order("area", { ascending: true, nullsFirst: false })
+          .range(from, to)
+      );
+      query = query.in("week", missingWeeks).eq("dimension_type", "area").not("area", "is", null);
+      return query;
+    });
+
+    const byArea = aggregateRowsToHeatmap({
+      rows: areaRows,
+      measureUnit: "area",
+      unitColumn: "area",
+      metricIds
+    });
+
+    const collapsed = new Map<string, { sum: number; avgSum: number; avgCount: number }>();
+    for (const row of byArea) {
+      const week = String(row.week ?? "").trim();
+      const metricId = String(row.metric_id ?? "").trim();
+      const value = Number(row.value ?? NaN);
+      if (!week || !metricId || !Number.isFinite(value)) continue;
+      const key = `${week}|${metricId}`;
+      const prev = collapsed.get(key) ?? { sum: 0, avgSum: 0, avgCount: 0 };
+      if (isRateMetric(metricId)) {
+        prev.avgSum += value;
+        prev.avgCount += 1;
+      } else {
+        prev.sum += value;
+      }
+      collapsed.set(key, prev);
+    }
+
+    const derivedAllRows: HeatmapAggRow[] = [];
+    for (const [key, state] of collapsed.entries()) {
+      const [week, metricId] = key.split("|");
+      const value = isRateMetric(metricId) ? state.avgSum / Math.max(state.avgCount, 1) : state.sum;
+      derivedAllRows.push({
+        week,
+        measure_unit: "all",
+        filter_value: ALL_LABEL,
+        metric_id: metricId,
+        value
+      });
+    }
+
+    const merged = new Map<string, HeatmapAggRow>();
+    for (const row of derivedAllRows) {
+      const key = `${row.week}|${row.metric_id}`;
+      merged.set(key, row);
+    }
+    for (const row of fromAll) {
+      const key = `${row.week}|${row.metric_id}`;
+      merged.set(key, row);
+    }
+    return Array.from(merged.values());
+  }
+
   const unitColumn = columnByUnit[measureUnit];
   const selectColumns = Array.from(new Set(["week", unitColumn, ...metricIds])).join(",");
   const data = await fetchPagedRows<Record<string, unknown>>((from, to) => {
@@ -200,41 +376,12 @@ const getHeatmapFromBaseTable = async ({
     return query;
   });
 
-  type AggState = { max: number; sum: number; count: number };
-  const accumulator = new Map<string, AggState>();
-  for (const row of data) {
-    const week = String(row.week ?? "").trim();
-    const entity = String(row[unitColumn] ?? "").trim();
-    if (!week || !entity) continue;
-
-    for (const metricId of metricIds) {
-      const raw = row[metricId];
-      const value = typeof raw === "number" ? raw : Number(raw ?? NaN);
-      if (!Number.isFinite(value)) continue;
-
-      const key = `${week}|${entity}|${metricId}`;
-      const prev = accumulator.get(key) ?? { max: Number.NEGATIVE_INFINITY, sum: 0, count: 0 };
-      prev.max = Math.max(prev.max, value);
-      prev.sum += value;
-      prev.count += 1;
-      accumulator.set(key, prev);
-    }
-  }
-
-  const rows: HeatmapAggRow[] = [];
-  for (const [key, state] of accumulator.entries()) {
-    const [week, entity, metricId] = key.split("|");
-    const value = isRateMetric(metricId) ? state.sum / Math.max(state.count, 1) : state.max;
-    rows.push({
-      week,
-      measure_unit: measureUnit,
-      filter_value: entity,
-      metric_id: metricId,
-      value
-    });
-  }
-
-  return rows;
+  return aggregateRowsToHeatmap({
+    rows: data,
+    measureUnit,
+    unitColumn,
+    metricIds
+  });
 };
 
 export async function getWeeksData(options?: { limit?: number; order?: "asc" | "desc" }) {
@@ -280,7 +427,7 @@ export async function getSupportedMetricIds(timings?: { queryMs?: number; proces
 export async function getMetricDictionary(timings?: { queryMs?: number; processMs?: number }) {
   const queryStart = Date.now();
   const [metricRowsResult, supportedMetricIds] = await Promise.all([
-    schemaClient.from(tableName(METRIC_TABLE)).select("metric,korean_name,description,query"),
+    schemaClient.from(tableName(METRIC_TABLE)).select("*"),
     getSupportedMetricIds()
   ]);
   if (timings) timings.queryMs = Date.now() - queryStart;
@@ -292,6 +439,11 @@ export async function getMetricDictionary(timings?: { queryMs?: number; processM
   const rows = (metricRowsResult.data ?? []) as MetricDictRow[];
   const result = rows
     .filter((row) => allowed.has(row.metric))
+    .map((row) => ({
+      ...row,
+      category2: resolveMetricCategory(row, 2),
+      category3: resolveMetricCategory(row, 3)
+    }))
     .sort((a, b) => a.metric.localeCompare(b.metric));
   if (timings) timings.processMs = Date.now() - processStart;
   return result;
@@ -367,14 +519,34 @@ export async function getHeatmap(
     return query;
   });
   let queryMs = Date.now() - queryStart;
-  if (allowBaseFallback && measureUnit !== "all" && rows.length === 0) {
+  const requestedWeekSet = new Set(weeks);
+  const rowWeekSet = new Set(rows.map((row) => String(row.week ?? "").trim()).filter((week) => week.length > 0));
+  const missingWeeks = weeks.filter((week) => requestedWeekSet.has(week) && !rowWeekSet.has(week));
+  const recentWeeks = weeks.slice(0, Math.min(2, weeks.length));
+  const fallbackWeeks = Array.from(new Set([...missingWeeks, ...recentWeeks]));
+
+  if (allowBaseFallback && (rows.length === 0 || fallbackWeeks.length > 0)) {
     const fallbackStart = Date.now();
-    rows = await getHeatmapFromBaseTable({
+    const fallbackRows = await getHeatmapFromBaseTable({
       measureUnit,
       filterValue,
-      weeks,
+      weeks: rows.length === 0 ? weeks : fallbackWeeks,
       metricIds
     });
+    if (rows.length === 0) {
+      rows = fallbackRows;
+    } else if (fallbackRows.length > 0) {
+      const merged = new Map<string, HeatmapAggRow>();
+      for (const row of rows) {
+        const key = `${row.week}|${row.measure_unit}|${row.filter_value}|${row.metric_id}`;
+        merged.set(key, row);
+      }
+      for (const row of fallbackRows) {
+        const key = `${row.week}|${row.measure_unit}|${row.filter_value}|${row.metric_id}`;
+        merged.set(key, row);
+      }
+      rows = Array.from(merged.values());
+    }
     queryMs += Date.now() - fallbackStart;
   }
   if (timings) timings.queryMs = queryMs;

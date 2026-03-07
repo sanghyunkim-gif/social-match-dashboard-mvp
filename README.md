@@ -44,7 +44,9 @@
   - `GET /api/filter-options` 응답에 TTL 캐시(600초) 적용
   - `/api/heatmap`의 지원 지표 목록 조회(`getSupportedMetricIds`)에 TTL 캐시(3600초) 적용
 - 운영 안정화:
-  - `HEATMAP_ALLOW_BASE_FALLBACK=1`일 때만 원천 fallback 허용(기본 OFF)
+  - `HEATMAP_ALLOW_BASE_FALLBACK=0`이 아닐 때 원천 fallback 허용(기본 ON)
+  - 최신 1~2주 MV 누락 시 원천 집계로 보강
+  - `all` 단위에서 `dimension_type='all'` 데이터가 비는 경우 `area` 기반으로 `all` 재구성
 - 자동 검증:
   - 전체 지원 지표 대상 원천 vs MV 정합성 검증 스크립트 추가
   - PR마다 GitHub Actions에서 자동 검증
@@ -60,8 +62,12 @@
     - 메인 패널 오버플로우 방지(`.main-panel { min-width: 0; }`)
   - 지표 선택 UX 개선:
     - 사이드 패널 방식으로 변경
+    - 사이드 패널 상단 검색 기능 추가
+    - 카테고리2/3 기반 그룹 표시
     - 지표 설명 + 쿼리 복사 버튼 제공
     - `선택완료`/`선택 초기화` 동작 및 선택 0건 시 완료 버튼 비활성
+  - 데이터 결과 테이블 우상단에 `증감 노출` 체크박스 추가(기본 ON)
+  - 추이 스파크라인을 검정색으로 조정하고 회색 점선 추세선 추가
   - 상단 탭 영역(개인 저장 보고서용)은 레이아웃 PoC 후 현재 화면에서 비활성화
     - 추후 재도입 예정 (GA 보고서 탭과 유사한 개념)
   - 데이터 결과 테이블 첫 행 sticky 고정은 현재 비활성화

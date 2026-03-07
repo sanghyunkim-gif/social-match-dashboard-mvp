@@ -89,6 +89,8 @@ type MetricRow = {
   korean_name: string;
   description: string | null;
   query: string | null;
+  category2?: string | null;
+  category3?: string | null;
 };
 
 type HeatmapRow = {
@@ -174,6 +176,8 @@ export default function Home() {
   const [metricDraftIds, setMetricDraftIds] = useState<string[]>([]);
   const [isMetricPickerOpen, setIsMetricPickerOpen] = useState(false);
   const [copiedMetricId, setCopiedMetricId] = useState<string | null>(null);
+  const [metricSearchTerm, setMetricSearchTerm] = useState("");
+  const [showDeltaValues, setShowDeltaValues] = useState(true);
 
   const [weeks, setWeeks] = useState<string[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -259,6 +263,8 @@ export default function Home() {
           name: row.korean_name || row.metric,
           description: row.description || "",
           query: row.query || "",
+          category2: row.category2 ?? null,
+          category3: row.category3 ?? null,
           format: getMetricFormat(row.metric)
         }));
         setMetrics(mappedMetrics);
@@ -498,6 +504,7 @@ export default function Home() {
 
   const openMetricPicker = () => {
     setMetricDraftIds(selectedMetricIds.slice());
+    setMetricSearchTerm("");
     setIsMetricPickerOpen(true);
   };
 
@@ -533,6 +540,47 @@ export default function Home() {
       pushError("쿼리 복사 실패", (error as Error).message);
     }
   };
+
+  const filteredMetrics = useMemo(() => {
+    const keyword = metricSearchTerm.trim().toLowerCase();
+    if (!keyword) return metrics;
+    return metrics.filter((metric) => {
+      const haystack = [
+        metric.id,
+        metric.name,
+        metric.description,
+        metric.category2 ?? "",
+        metric.category3 ?? ""
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [metrics, metricSearchTerm]);
+
+  const groupedMetrics = useMemo(() => {
+    const outer = new Map<string, Map<string, Metric[]>>();
+    for (const metric of filteredMetrics) {
+      const category2 = (metric.category2 || "기타").trim() || "기타";
+      const category3 = (metric.category3 || "기타").trim() || "기타";
+      if (!outer.has(category2)) outer.set(category2, new Map());
+      const byCategory3 = outer.get(category2)!;
+      if (!byCategory3.has(category3)) byCategory3.set(category3, []);
+      byCategory3.get(category3)!.push(metric);
+    }
+
+    return Array.from(outer.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([category2, byCategory3]) => ({
+        category2,
+        groups: Array.from(byCategory3.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([category3, items]) => ({
+            category3,
+            items: items.slice().sort((a, b) => a.name.localeCompare(b.name))
+          }))
+      }));
+  }, [filteredMetrics]);
 
   // --- 템플릿 CRUD ---
   const loadTemplates = async () => {
@@ -762,6 +810,8 @@ export default function Home() {
                 weeks={weeks}
                 metrics={selectedMetrics}
                 series={seriesByEntity[ALL_LABEL] ?? {}}
+                showDelta={showDeltaValues}
+                onShowDeltaChange={setShowDeltaValues}
               />
             ) : (
               <EntityMetricTable
@@ -769,6 +819,8 @@ export default function Home() {
                 entities={entities}
                 metrics={selectedMetrics}
                 seriesByEntity={seriesByEntity}
+                showDelta={showDeltaValues}
+                onShowDeltaChange={setShowDeltaValues}
               />
             )}
           </div>
@@ -795,37 +847,59 @@ export default function Home() {
                 닫기
               </button>
             </div>
+            <div className="metric-picker-search">
+              <input
+                type="search"
+                value={metricSearchTerm}
+                onChange={(event) => setMetricSearchTerm(event.target.value)}
+                placeholder="지표명/ID/설명 검색"
+              />
+            </div>
             <div className="metric-picker-body">
-              {metrics.map((metric) => {
-                const isSelected = metricDraftIds.includes(metric.id);
-                return (
-                  <div
-                    key={metric.id}
-                    role="button"
-                    tabIndex={0}
-                    className={`metric-pick-item ${isSelected ? "is-selected" : ""}`}
-                    onClick={() => toggleMetricDraft(metric.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") toggleMetricDraft(metric.id);
-                    }}
-                    aria-pressed={isSelected}
-                  >
-                    <div className="metric-pick-title">{metric.name}</div>
-                    <button
-                      type="button"
-                      className="metric-copy-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void copyMetricQuery(metric);
-                      }}
-                    >
-                      {copiedMetricId === metric.id ? "복사됨" : "쿼리 복사"}
-                    </button>
-                    <div className="metric-pick-id">{metric.id}</div>
-                    <div className="metric-pick-desc">{metric.description || "설명 없음"}</div>
-                  </div>
-                );
-              })}
+              {groupedMetrics.length === 0 ? (
+                <div className="metric-picker-empty">검색 결과가 없습니다.</div>
+              ) : (
+                groupedMetrics.map((category2Group) => (
+                  <section key={category2Group.category2} className="metric-category2-group">
+                    <h4 className="metric-category2-title">{category2Group.category2}</h4>
+                    {category2Group.groups.map((category3Group) => (
+                      <div key={`${category2Group.category2}-${category3Group.category3}`} className="metric-category3-group">
+                        <h5 className="metric-category3-title">{category3Group.category3}</h5>
+                        {category3Group.items.map((metric) => {
+                          const isSelected = metricDraftIds.includes(metric.id);
+                          return (
+                            <div
+                              key={metric.id}
+                              role="button"
+                              tabIndex={0}
+                              className={`metric-pick-item ${isSelected ? "is-selected" : ""}`}
+                              onClick={() => toggleMetricDraft(metric.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") toggleMetricDraft(metric.id);
+                              }}
+                              aria-pressed={isSelected}
+                            >
+                              <div className="metric-pick-title">{metric.name}</div>
+                              <button
+                                type="button"
+                                className="metric-copy-btn"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void copyMetricQuery(metric);
+                                }}
+                              >
+                                {copiedMetricId === metric.id ? "복사됨" : "쿼리 복사"}
+                              </button>
+                              <div className="metric-pick-id">{metric.id}</div>
+                              <div className="metric-pick-desc">{metric.description || "설명 없음"}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </section>
+                ))
+              )}
             </div>
             <div className="metric-picker-footer">
               <button type="button" className="btn-ghost" onClick={resetMetricDraft}>

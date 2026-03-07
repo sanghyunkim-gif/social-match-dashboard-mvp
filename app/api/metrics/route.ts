@@ -11,7 +11,7 @@ const fetchMetrics = async () => {
   return { metrics, timings, cachedAt: Date.now() };
 };
 
-const getMetricsCached = unstable_cache(fetchMetrics, ["api-metrics-v2-with-query"], {
+const getMetricsCached = unstable_cache(fetchMetrics, ["api-metrics-v3-with-query-category"], {
   revalidate: METRICS_CACHE_TTL
 });
 

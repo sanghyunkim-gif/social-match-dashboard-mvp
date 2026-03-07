@@ -10,6 +10,8 @@ type EntityMetricTableProps = {
   entities: Entity[];
   metrics: Metric[];
   seriesByEntity: Record<string, Record<string, number[]>>;
+  showDelta?: boolean;
+  onShowDeltaChange?: (next: boolean) => void;
 };
 
 const formatDelta = (metric: Metric, delta: number | null) => {
@@ -32,7 +34,14 @@ const getHeatColor = (values: number[], value: number) => {
   return `rgba(37, 99, 235, ${intensity})`;
 };
 
-export default function EntityMetricTable({ weeks, entities, metrics, seriesByEntity }: EntityMetricTableProps) {
+export default function EntityMetricTable({
+  weeks,
+  entities,
+  metrics,
+  seriesByEntity,
+  showDelta = true,
+  onShowDeltaChange
+}: EntityMetricTableProps) {
   const weekColumnCount = weeks.length;
   const defaultWidths = useMemo(() => [180, 120, 120, ...Array(weekColumnCount).fill(120)], [weekColumnCount]);
   const [columnWidths, setColumnWidths] = useState<number[]>(defaultWidths);
@@ -76,7 +85,19 @@ export default function EntityMetricTable({ weeks, entities, metrics, seriesByEn
 
   return (
     <div className="card table-card">
-      <div className="card-title">엔티티별 지표 추이</div>
+      <div className="table-head-row">
+        <div className="card-title">엔티티별 지표 추이</div>
+        {onShowDeltaChange && (
+          <label className="table-toggle">
+            <input
+              type="checkbox"
+              checked={showDelta}
+              onChange={(event) => onShowDeltaChange(event.target.checked)}
+            />
+            <span>증감 노출</span>
+          </label>
+        )}
+      </div>
       <div className="table-scroll">
         <div className="data-grid entity-grid">
           <div className="data-row data-header" style={{ gridTemplateColumns } as CSSProperties}>
@@ -149,13 +170,15 @@ export default function EntityMetricTable({ weeks, entities, metrics, seriesByEn
                         style={{ backgroundColor: getHeatColor(values, value) }}
                       >
                         <span className="value-main">{formatValue(value, metric)}</span>
-                        <span
-                          className={`value-delta ${delta !== null ? "has-delta" : ""} ${
-                            delta !== null && delta < 0 ? "is-negative" : ""
-                          }`}
-                        >
-                          {delta !== null ? `(${deltaLabel})` : "-"}
-                        </span>
+                        {showDelta && (
+                          <span
+                            className={`value-delta ${delta !== null ? "has-delta" : ""} ${
+                              delta !== null && delta < 0 ? "is-negative" : ""
+                            }`}
+                          >
+                            {delta !== null ? `(${deltaLabel})` : "-"}
+                          </span>
+                        )}
                       </div>
                     );
                   })}

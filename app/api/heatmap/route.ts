@@ -144,7 +144,7 @@ export async function POST(request: Request) {
         );
         return { rows, timings, cachedAt: Date.now() };
       },
-      ["api-heatmap", cacheKey],
+      ["api-heatmap-v2", cacheKey],
       { revalidate: HEATMAP_CACHE_TTL }
     );
 
