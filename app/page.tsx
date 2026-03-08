@@ -706,6 +706,7 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (typeof ResizeObserver === "undefined") return;
     const headerEl = headerRef.current;
     const controlsEl = controlsRef.current;
     if (!headerEl || !controlsEl) return;
