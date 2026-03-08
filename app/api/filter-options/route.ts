@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { getFilterOptions } from "../../lib/dataQueries";
 
+export const dynamic = "force-dynamic";
+
 const allowedUnits = ["all", "area_group", "area", "stadium_group", "stadium"] as const;
 const FILTER_OPTIONS_CACHE_TTL = 600;
 

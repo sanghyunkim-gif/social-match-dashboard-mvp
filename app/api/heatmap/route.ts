@@ -3,6 +3,8 @@ import { unstable_cache } from "next/cache";
 import { randomUUID } from "crypto";
 import { getHeatmap, getSupportedMetricIds } from "../../lib/dataQueries";
 
+export const dynamic = "force-dynamic";
+
 const allowedUnits = ["all", "area_group", "area", "stadium_group", "stadium"] as const;
 const MAX_WEEKS = 104;
 const HEATMAP_CACHE_TTL = 180;

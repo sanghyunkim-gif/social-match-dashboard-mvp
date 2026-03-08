@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { createClient } from "@/app/lib/supabase/client";
+import { createClient, isSupabaseBrowserEnvConfigured } from "@/app/lib/supabase/client";
 import ControlBar from "./components/ControlBar";
 import MetricTable from "./components/MetricTable";
 import EntityMetricTable from "./components/EntityMetricTable";
@@ -223,10 +223,19 @@ export default function Home() {
   };
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data }) => {
-      const meta = data.user?.user_metadata;
-      setUserName(meta?.full_name || meta?.name || data.user?.email || null);
-    });
+    if (!isSupabaseBrowserEnvConfigured()) {
+      pushError("Supabase public env missing", "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
+      return;
+    }
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        const meta = data.user?.user_metadata;
+        setUserName(meta?.full_name || meta?.name || data.user?.email || null);
+      })
+      .catch((error) => {
+        pushError("Auth user load failed", (error as Error).message);
+      });
   }, []);
 
   useEffect(() => {
@@ -748,9 +757,17 @@ export default function Home() {
           <button
             className="logout-btn"
             onClick={async () => {
-              const supabase = createClient();
-              await supabase.auth.signOut();
-              window.location.href = "/login";
+              try {
+                if (!isSupabaseBrowserEnvConfigured()) {
+                  pushError("Supabase public env missing", "로그아웃 기능을 사용할 수 없습니다.");
+                  return;
+                }
+                const supabase = createClient();
+                await supabase.auth.signOut();
+                window.location.href = "/login";
+              } catch (error) {
+                pushError("로그아웃 실패", (error as Error).message);
+              }
             }}
           >
             로그아웃

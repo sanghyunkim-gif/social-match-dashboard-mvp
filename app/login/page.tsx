@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/app/lib/supabase/client";
+import { createClient, isSupabaseBrowserEnvConfigured } from "@/app/lib/supabase/client";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -11,16 +11,27 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    try {
+      if (!isSupabaseBrowserEnvConfigured()) {
+        setError("배포 환경변수(NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY)가 설정되지 않았습니다.");
+        setLoading(false);
+        return;
+      }
 
-    if (error) {
-      setError(error.message);
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (error) {
+        setError(error.message);
+      }
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
       setLoading(false);
     }
   };
