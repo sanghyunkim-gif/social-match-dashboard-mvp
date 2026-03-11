@@ -226,6 +226,22 @@
 - 기능:
   - build + data validation + commit
   - 옵션으로 push/PR 생성
+
+### 9.3 주간 MV 복구 스케줄 (Airbyte overwrite 대응)
+- 목적:
+  - Airbyte 주간 overwrite/refresh 이후 `weekly_agg_mv` 및 인덱스 종속성 이탈 자동 복구
+- 실행 시각:
+  - 매주 화요일 10:00 KST (GitHub Actions cron: `0 1 * * 2`)
+- 워크플로:
+  - `.github/workflows/weekly-mv-rebuild.yml`
+- 실행 순서:
+  - `supabase/sql/refresh_weekly_agg_mv.sql` 실행 (MV 재생성 + 인덱스 보장)
+  - `scripts/validate-recent-refresh.mjs` 실행 (최근 3주/주요 지표 존재 헬스체크)
+- 필요 Secrets:
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `SUPABASE_PROJECT_REF`
+  - `SUPABASE_DB_PASSWORD`
 ## 11. 비기능 요구사항
 - UTF-8 인코딩 강제(`predev`, `prebuild`)
 - 원천 테이블 스키마 변경 금지
