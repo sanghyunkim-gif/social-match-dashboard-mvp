@@ -140,16 +140,35 @@ npm run dev
 npm run data:validate-mv
 ```
 
+- 로컬 최신 주차 헬스체크(경량)
+```bash
+npm run data:validate-recent-refresh
+```
+
 - PR 자동 검증
   - 워크플로: `.github/workflows/data-validation.yml`
   - 필요한 GitHub Secrets:
     - `SUPABASE_URL`
     - `SUPABASE_SERVICE_ROLE_KEY`
 
+- 주간 MV 자동 재생성/검증
+  - 워크플로: `.github/workflows/weekly-mv-rebuild.yml`
+  - 스케줄: 매주 화요일 10:00 KST (UTC `0 1 * * 2`)
+  - 실행 SQL: `supabase/sql/refresh_weekly_agg_mv.sql`
+  - 필요한 GitHub Secrets:
+    - `SUPABASE_URL`
+    - `SUPABASE_SERVICE_ROLE_KEY`
+    - `SUPABASE_PROJECT_REF`
+    - `SUPABASE_DB_PASSWORD`
+
 ## Supabase 배포 워크플로
 - 마이그레이션: `supabase/migrations/202602210001_weekly_agg_mv_v2.sql`
 - 마이그레이션: `supabase/migrations/202602220001_weekly_agg_mv_filter_options_idx.sql`
 - 빠른 실행 가이드: `SUPABASE_CLI_WORKFLOW.md`
+- 수동 MV 재생성:
+```bash
+npm run sb:refresh-mv
+```
 
 ## 참고 문서
 - 요구사항/운영 기준: `PRD.md`
