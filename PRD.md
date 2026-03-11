@@ -159,6 +159,22 @@
 - 레이아웃:
   - 상단 헤더/검색영역 sticky를 해제해 스크롤 시 결과 테이블 가림 현상 제거
 
+### 7.11 2026-03-12 MV 자동복구 운영 이슈
+- 배경:
+  - Airbyte 주간 overwrite/refresh 방식으로 원천 테이블이 갱신될 때, 분석용 MV/인덱스 종속성이 깨질 수 있음
+- 오늘 반영:
+  - 주간 자동복구 워크플로(`.github/workflows/weekly-mv-rebuild.yml`) main 반영
+  - 재생성 SQL(`supabase/sql/refresh_weekly_agg_mv.sql`) 및 최신 주차 헬스체크(`scripts/validate-recent-refresh.mjs`) 연동
+- 오늘 장애/로그:
+  - Direct DB 경로는 GitHub Actions IPv4 환경에서 `Network is unreachable`로 실패
+  - `SUPABASE_DB_URI` 기반으로 전환 후 재생성 단계는 통과했으나
+  - `Validate latest weeks after rebuild` 단계에서 에러 메시지 컨텍스트 부족(`{ message: '' }`)
+- 다음 작업 TODO:
+  - 헬스체크 스크립트 에러 출력 개선(코드/디테일/힌트/쿼리 컨텍스트)
+  - 최근 3주 x 5개 단위 count 쿼리 수동 재현으로 실패 지점 확정
+  - pooler URI 형식/인코딩/sslmode 점검
+  - 헬스체크 실패 기준(존재성/카운트 기준) 정책 확정
+
 ## 8. 운영 도메인 원칙
 - Canonical 운영 도메인은 단일값만 사용:
   - `https://social-match-dashboard-mvp.vercel.app`
@@ -240,8 +256,7 @@
 - 필요 Secrets:
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_ROLE_KEY`
-  - `SUPABASE_PROJECT_REF`
-  - `SUPABASE_DB_PASSWORD`
+  - `SUPABASE_DB_URI`
 ## 11. 비기능 요구사항
 - UTF-8 인코딩 강제(`predev`, `prebuild`)
 - 원천 테이블 스키마 변경 금지

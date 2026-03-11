@@ -158,8 +158,29 @@ npm run data:validate-recent-refresh
   - 필요한 GitHub Secrets:
     - `SUPABASE_URL`
     - `SUPABASE_SERVICE_ROLE_KEY`
-    - `SUPABASE_PROJECT_REF`
-    - `SUPABASE_DB_PASSWORD`
+    - `SUPABASE_DB_URI`
+
+## 2026-03-12 운영 메모 (MV 자동복구)
+- 오늘 확인한 흐름:
+  - Airbyte 주간 overwrite 이후 `weekly_agg_mv` 기반 조회 누락 가능성 확인
+  - 주간 자동 복구 워크플로(`Weekly MV Rebuild`)를 main에 반영
+  - 재생성 SQL + 최신 3주 헬스체크 스크립트 연결
+- 오늘 발생한 오류:
+  - 초기: GitHub Actions에서 Direct DB 접속 시 `Network is unreachable` (IPv6 경로)
+  - 조치: 워크플로를 `SUPABASE_DB_URI` 기반 접속으로 변경
+  - 현재: `Rebuild weekly_agg_mv and indexes` 단계는 통과, `Validate latest weeks after rebuild` 단계에서 실패(로그에 `{ message: '' }` 형태로만 노출)
+- 내일 TODO:
+  - `scripts/validate-recent-refresh.mjs` 에러 로깅 개선:
+    - Supabase error payload 전체 출력(code, details, hint, message)
+    - 실패한 week/unit/metric query context 함께 출력
+  - 헬스체크 쿼리 직접 재현:
+    - 최근 3주 x 5개 unit에 대해 `weekly_agg_mv` count/head query 수동 재현
+    - RLS/권한/스키마 접근 여부 확인
+  - `SUPABASE_DB_URI` 점검:
+    - pooler URI 사용 여부 재검증(호스트가 `pooler.supabase.com`인지 확인)
+    - 비밀번호 인코딩/sslmode 포함 여부 점검
+  - 헬스체크 통과 기준 확정:
+    - 최소 `total_match_cnt` 존재 확인 vs row count 기준 중 정책 확정
 
 ## Supabase 배포 워크플로
 - 마이그레이션: `supabase/migrations/202602210001_weekly_agg_mv_v2.sql`
