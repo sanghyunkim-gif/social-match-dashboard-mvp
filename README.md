@@ -193,6 +193,9 @@ npm run data:validate-recent-refresh
   - 후속 확인에서 GitHub Actions `Weekly MV Rebuild #12`가 `relation "bigquery.weeks_view" does not exist`로 실패해, schema cache뿐 아니라 view 오브젝트 자체 복구가 필요함을 확인
   - 대응으로 MV 재생성 SQL(`supabase/sql/refresh_weekly_agg_mv.sql`)과 신규 migration에 `bigquery.weeks_view` 재생성 + `notify pgrst, 'reload schema'`를 포함
   - 로컬 드릴다운 점검 중 `stadium_group` 이하 부모-자식 조회가 원천 테이블 full scan으로 timeout되어, `entity_hierarchy_mv`를 추가해 부모-자식 옵션/드릴다운 조회를 MV + 계층 MV 조합으로 전환
+  - `/api/weeks`는 `weeks_view` timeout을 피하기 위해 `weekly_agg_mv` 기준 recent week 수집 방식으로 변경
+  - `/api/heatmap`은 `all` 단위의 불필요한 fallback을 제거하고, 드릴다운 시 child entity를 chunk 단위로 조회하도록 조정해 `area_group -> area`, `area -> stadium_group` 드릴다운 timeout을 완화
+  - `data_improvement_260312_01` 브랜치 기준 워크플로 재실행/배포 후 기본 조회와 드릴다운 조회가 정상 동작하는 것 확인
   - 로컬 DB 자격증명으로는 원격 `db push` 인증이 실패해, 실제 원격 반영은 GitHub Actions 또는 올바른 `SUPABASE_DB_URI`/DB password 기준으로 별도 실행 필요
 - 다음 TODO:
   - 진행 중 주차를 기본 조회에서 제외할지, `집계 진행 중` 상태로 노출할지 정책 결정
