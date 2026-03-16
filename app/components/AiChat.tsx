@@ -1,126 +1,91 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatContext, SummaryPayload } from "../types";
+import type { ChatContext, ChatMessage, FilterAction, AiChatAvailableOptions } from "../types";
+import ChatMessageRenderer from "./chat/ChatMessageRenderer";
 
-type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-};
-
-type Props = {
-  visible: boolean;
-  summary: SummaryPayload | null;
-  isSummaryLoading: boolean;
-  context: ChatContext | null;
-};
-
-const SUGGESTIONS = [
-  "이번 기간의 핵심 트렌드를 알려줘",
-  "가장 변동이 큰 지표는?",
-  "개선이 필요한 영역을 분석해줘",
+const INITIAL_SUGGESTIONS = [
+  "전체 진행률 추이 보여줘",
+  "지역별 비교가 궁금해",
+  "최근 추이를 보고 싶어",
 ];
 
-export default function AiChat({ visible, summary, isSummaryLoading, context }: Props) {
-  const [isOpen, setIsOpen] = useState(false);
+type AiChatProps = {
+  onApplyFilters: (filters: FilterAction["filters"]) => void;
+  dashboardContext: ChatContext | null;
+  availableOptions: AiChatAvailableOptions;
+};
+
+export default function AiChat({ onApplyFilters, dashboardContext, availableOptions }: AiChatProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [hasPulse, setHasPulse] = useState(false);
+  const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
+  const [filterAppliedNotice, setFilterAppliedNotice] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const prevSummaryRef = useRef<SummaryPayload | null>(null);
-  const summaryInsertedRef = useRef(false);
-
-  // Pulse animation when new summary arrives
-  useEffect(() => {
-    if (summary && summary !== prevSummaryRef.current) {
-      prevSummaryRef.current = summary;
-      setHasPulse(true);
-      const timer = setTimeout(() => setHasPulse(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [summary]);
-
-  // Reset when not visible
-  useEffect(() => {
-    if (!visible) {
-      setIsOpen(false);
-      setMessages([]);
-      setInput("");
-      summaryInsertedRef.current = false;
-    }
-  }, [visible]);
-
-  // Insert summary as first message when panel opens
-  useEffect(() => {
-    if (isOpen && summary && !summaryInsertedRef.current) {
-      const summaryText = [
-        `**${summary.title}**`,
-        "",
-        ...summary.bullets.map((b) => `- ${b}`),
-        ...(summary.caution ? ["", `_${summary.caution}_`] : []),
-      ].join("\n");
-
-      setMessages([
-        {
-          id: "summary-initial",
-          role: "assistant",
-          content: summaryText,
-        },
-      ]);
-      summaryInsertedRef.current = true;
-    }
-  }, [isOpen, summary]);
+  const pendingAnalysisRef = useRef(false);
+  const prevContextRef = useRef<ChatContext | null>(null);
 
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  // Focus input when opened
+  // ESC to collapse
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 300);
-    }
-  }, [isOpen]);
-
-  // ESC to close
-  useEffect(() => {
-    if (!isOpen) return;
+    if (!isExpanded) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsOpen(false);
+      if (e.key === "Escape") setIsExpanded(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [isOpen]);
+  }, [isExpanded]);
 
-  const sendMessage = useCallback(
+  // Auto-expand when messages arrive
+  useEffect(() => {
+    if (messages.length > 0) setIsExpanded(true);
+  }, [messages.length]);
+
+  // When dashboardContext updates after filter apply, auto-send analysis request
+  useEffect(() => {
+    if (!pendingAnalysisRef.current || !dashboardContext) return;
+    if (dashboardContext === prevContextRef.current) return;
+    prevContextRef.current = dashboardContext;
+    pendingAnalysisRef.current = false;
+    setFilterAppliedNotice(null);
+
+    const analyzeMessage = "대시보드에 표시된 데이터를 분석해줘.";
+    requestAnalysis(analyzeMessage);
+  }, [dashboardContext]);
+
+  const requestAnalysis = useCallback(
     async (text: string) => {
-      if (!text.trim() || isLoading || !context) return;
-
       const userMsg: ChatMessage = {
-        id: `${Date.now()}-user`,
+        id: `${Date.now()}-system`,
         role: "user",
-        content: text.trim(),
+        content: text,
       };
 
-      const nextMessages = [...messages, userMsg];
-      setMessages(nextMessages);
-      setInput("");
+      setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
+      setDynamicSuggestions([]);
 
       try {
+        const allMessages = [...messages, userMsg];
+        const apiMessages = allMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+
         const res = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: nextMessages.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-            context,
+            messages: apiMessages,
+            context: dashboardContext,
+            availableOptions,
           }),
         });
 
@@ -129,15 +94,28 @@ export default function AiChat({ visible, summary, isSummaryLoading, context }: 
           throw new Error((err as { error?: string }).error || "응답 실패");
         }
 
-        const data = (await res.json()) as { reply: string };
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `${Date.now()}-assistant`,
-            role: "assistant",
-            content: data.reply,
-          },
-        ]);
+        const data = (await res.json()) as {
+          reply: string;
+          action?: FilterAction;
+          recommendations?: string[];
+        };
+
+        if (data.recommendations?.length) {
+          setDynamicSuggestions(data.recommendations);
+        }
+
+        const assistantMsg: ChatMessage = {
+          id: `${Date.now()}-assistant`,
+          role: "assistant",
+          content: data.reply,
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+
+        if (data.action?.type === "apply_filters") {
+          pendingAnalysisRef.current = true;
+          setFilterAppliedNotice("필터를 적용하고 데이터를 조회하는 중...");
+          onApplyFilters(data.action.filters);
+        }
       } catch (error) {
         setMessages((prev) => [
           ...prev,
@@ -151,35 +129,101 @@ export default function AiChat({ visible, summary, isSummaryLoading, context }: 
         setIsLoading(false);
       }
     },
-    [messages, isLoading, context]
+    [messages, dashboardContext, availableOptions, onApplyFilters]
   );
 
-  if (!visible) return null;
+  const sendMessage = useCallback(
+    async (text: string) => {
+      if (!text.trim() || isLoading) return;
+
+      const userMsg: ChatMessage = {
+        id: `${Date.now()}-user`,
+        role: "user",
+        content: text.trim(),
+      };
+
+      const nextMessages = [...messages, userMsg];
+      setMessages(nextMessages);
+      setInput("");
+      setIsLoading(true);
+      setDynamicSuggestions([]);
+      setIsExpanded(true);
+
+      try {
+        const apiMessages = nextMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+
+        const res = await fetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: apiMessages,
+            context: dashboardContext,
+            availableOptions,
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error((err as { error?: string }).error || "응답 실패");
+        }
+
+        const data = (await res.json()) as {
+          reply: string;
+          action?: FilterAction;
+          recommendations?: string[];
+        };
+
+        if (data.recommendations?.length) {
+          setDynamicSuggestions(data.recommendations);
+        }
+
+        const assistantMsg: ChatMessage = {
+          id: `${Date.now()}-assistant`,
+          role: "assistant",
+          content: data.reply,
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+
+        if (data.action?.type === "apply_filters") {
+          pendingAnalysisRef.current = true;
+          setFilterAppliedNotice("필터를 적용하고 데이터를 조회하는 중...");
+          onApplyFilters(data.action.filters);
+        }
+      } catch (error) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}-error`,
+            role: "assistant",
+            content: `오류가 발생했습니다: ${(error as Error).message}`,
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [messages, isLoading, dashboardContext, availableOptions, onApplyFilters]
+  );
+
+  const handleRecommendationSelect = useCallback(
+    (question: string) => {
+      sendMessage(question);
+    },
+    [sendMessage]
+  );
+
+  const showInitialSuggestions = messages.length === 0 && !isLoading && dynamicSuggestions.length === 0;
 
   return (
-    <>
-      {/* Floating avatar button */}
-      <button
-        type="button"
-        className={`ai-avatar-btn${hasPulse ? " has-pulse" : ""}`}
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-label="AI 채팅 열기"
-      >
-        <img
-          src="/ai-avatar.png"
-          alt="AI 어시스턴트"
-          className="ai-avatar-img"
-          width={40}
-          height={40}
-        />
-        {hasPulse && <span className="ai-pulse-ring" />}
-      </button>
-
-      {/* Chat panel */}
-      {isOpen && (
-        <div className="ai-chat-panel">
-          <div className="ai-chat-header">
-            <div className="ai-chat-header-left">
+    <div className={`ai-bottom-bar${isExpanded ? " is-expanded" : ""}`}>
+      {/* Expandable messages area */}
+      {isExpanded && (
+        <div className="ai-bottom-panel">
+          <div className="ai-bottom-header">
+            <div className="ai-bottom-header-left">
               <img
                 src="/ai-avatar.png"
                 alt=""
@@ -188,37 +232,26 @@ export default function AiChat({ visible, summary, isSummaryLoading, context }: 
                 height={28}
               />
               <span className="ai-chat-header-title">KEVIN AI</span>
+              <span className="ai-chat-header-badge">Assistant</span>
             </div>
             <button
               type="button"
               className="ai-chat-close"
-              onClick={() => setIsOpen(false)}
+              onClick={() => setIsExpanded(false)}
+              aria-label="채팅 닫기"
             >
-              ✕
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
 
-          <div className="ai-chat-messages">
-            {messages.length === 0 && !isSummaryLoading && (
+          <div className="ai-bottom-messages">
+            {messages.length === 0 && (
               <div className="ai-chat-empty">
-                데이터를 기반으로 질문해보세요.
-              </div>
-            )}
-
-            {isSummaryLoading && messages.length === 0 && (
-              <div className="ai-chat-bubble assistant">
-                <img
-                  src="/ai-avatar.png"
-                  alt=""
-                  className="ai-bubble-avatar"
-                  width={24}
-                  height={24}
-                />
-                <div className="ai-bubble-content">
-                  <div className="ai-typing">
-                    <span /><span /><span />
-                  </div>
-                </div>
+                원하는 데이터를 자연어로 요청해보세요.<br />
+                AI가 대시보드 필터를 자동으로 설정합니다.
               </div>
             )}
 
@@ -237,15 +270,33 @@ export default function AiChat({ visible, summary, isSummaryLoading, context }: 
                   />
                 )}
                 <div className="ai-bubble-content">
-                  {msg.content.split("\n").map((line, i) => (
-                    <span key={i}>
-                      {line}
-                      {i < msg.content.split("\n").length - 1 && <br />}
-                    </span>
-                  ))}
+                  <ChatMessageRenderer
+                    blocks={[{ type: "text", content: msg.content }]}
+                    onRecommendationSelect={handleRecommendationSelect}
+                  />
                 </div>
               </div>
             ))}
+
+            {filterAppliedNotice && (
+              <div className="ai-chat-bubble assistant">
+                <img
+                  src="/ai-avatar.png"
+                  alt=""
+                  className="ai-bubble-avatar"
+                  width={24}
+                  height={24}
+                />
+                <div className="ai-bubble-content">
+                  <div className="ai-filter-notice">
+                    <div className="ai-typing">
+                      <span /><span /><span />
+                    </div>
+                    <div className="ai-loading-label">{filterAppliedNotice}</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {isLoading && (
               <div className="ai-chat-bubble assistant">
@@ -257,8 +308,11 @@ export default function AiChat({ visible, summary, isSummaryLoading, context }: 
                   height={24}
                 />
                 <div className="ai-bubble-content">
-                  <div className="ai-typing">
-                    <span /><span /><span />
+                  <div className="ai-agent-loading">
+                    <div className="ai-typing">
+                      <span /><span /><span />
+                    </div>
+                    <div className="ai-loading-label">답변 생성 중...</div>
                   </div>
                 </div>
               </div>
@@ -267,10 +321,10 @@ export default function AiChat({ visible, summary, isSummaryLoading, context }: 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Suggestion chips */}
-          {messages.length <= 1 && !isLoading && (
+          {/* Dynamic suggestion chips */}
+          {dynamicSuggestions.length > 0 && !isLoading && (
             <div className="ai-suggestions">
-              {SUGGESTIONS.map((s) => (
+              {dynamicSuggestions.map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -282,33 +336,75 @@ export default function AiChat({ visible, summary, isSummaryLoading, context }: 
               ))}
             </div>
           )}
-
-          <div className="ai-chat-input-wrap">
-            <input
-              ref={inputRef}
-              type="text"
-              className="ai-chat-input"
-              value={input}
-              placeholder="질문을 입력하세요..."
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                  sendMessage(input);
-                }
-              }}
-              disabled={isLoading}
-            />
-            <button
-              type="button"
-              className="ai-chat-send"
-              onClick={() => sendMessage(input)}
-              disabled={isLoading || !input.trim()}
-            >
-              전송
-            </button>
-          </div>
         </div>
       )}
-    </>
+
+      {/* Initial suggestion chips (shown when collapsed and no messages) */}
+      {!isExpanded && showInitialSuggestions && (
+        <div className="ai-bottom-suggestions">
+          {INITIAL_SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className="ai-suggestion-chip"
+              onClick={() => sendMessage(s)}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Fixed input bar */}
+      <div className="ai-bottom-input-bar">
+        <img
+          src="/ai-avatar.png"
+          alt="AI"
+          className="ai-bottom-avatar"
+          width={32}
+          height={32}
+        />
+        <input
+          ref={inputRef}
+          type="text"
+          className="ai-bottom-input"
+          value={input}
+          placeholder="KEVIN AI에게 데이터를 질문하세요..."
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              sendMessage(input);
+            }
+          }}
+          onFocus={() => {
+            if (messages.length > 0) setIsExpanded(true);
+          }}
+          disabled={isLoading}
+        />
+        <button
+          type="button"
+          className="ai-bottom-send"
+          onClick={() => sendMessage(input)}
+          disabled={isLoading || !input.trim()}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+        {isExpanded && messages.length > 0 && (
+          <button
+            type="button"
+            className="ai-bottom-collapse"
+            onClick={() => setIsExpanded(false)}
+            aria-label="채팅 접기"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

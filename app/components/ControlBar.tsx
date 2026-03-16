@@ -94,7 +94,7 @@ export default function ControlBar({
 
   return (
     <div className="search-panel card">
-      <div className="search-row search-row-template">
+      <div className="search-row search-row-template surface-sunken">
         <div className="template-section" ref={dropdownRef}>
           <span className="field-label">템플릿</span>
           <div className="template-controls">

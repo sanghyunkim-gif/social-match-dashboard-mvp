@@ -1,12 +1,12 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createClient } from "@/app/lib/supabase/client";
 import ControlBar from "./components/ControlBar";
 import MetricTable from "./components/MetricTable";
 import EntityMetricTable from "./components/EntityMetricTable";
 import ErrorLogPanel, { ErrorLogItem } from "./components/ErrorLogPanel";
-import { ChatContext, Entity, FilterOption, FilterTemplate, FilterTemplateConfig, MeasurementUnit, Metric, PeriodUnit, SummaryPayload } from "./types";
+import { AiChatAvailableOptions, ChatContext, Entity, FilterAction, FilterOption, FilterTemplate, FilterTemplateConfig, MeasurementUnit, Metric, PeriodUnit, SummaryPayload } from "./types";
 import AiChat from "./components/AiChat";
 
 const ALL_LABEL = "전체";
@@ -202,6 +202,10 @@ export default function Home() {
   const [templates, setTemplates] = useState<FilterTemplate[]>([]);
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+
+  // AI chat context state
+  const [chatContext, setChatContext] = useState<ChatContext | null>(null);
+  const [autoSearchPending, setAutoSearchPending] = useState(false);
 
   const pushError = (message: string, detail?: string) => {
     setErrorLogs((prev) => {
@@ -452,6 +456,9 @@ export default function Home() {
         filterValue === ALL_VALUE ? ALL_LABEL : filterValue
       );
 
+      // Update chat context for AI
+      setChatContext(context);
+
       setIsSummaryLoading(true);
       const summaryResponse = await fetchJson<{ summary: SummaryPayload }>("/api/ai/summary", {
         method: "POST",
@@ -474,6 +481,36 @@ export default function Home() {
       setIsFetching(false);
     }
   };
+
+  // Handle AI filter apply
+  const handleAiApplyFilters = useCallback((filters: FilterAction["filters"]) => {
+    if (filters.periodRangeValue) setPeriodRangeValue(filters.periodRangeValue);
+    if (filters.measurementUnit) setMeasurementUnit(filters.measurementUnit as MeasurementUnit);
+    if (filters.filterValue) {
+      setFilterValue(filters.filterValue === "__ALL__" ? ALL_VALUE : filters.filterValue);
+    }
+    if (filters.metricIds?.length) setSelectedMetricIds(filters.metricIds);
+
+    // Trigger auto search on next render cycle
+    setAutoSearchPending(true);
+  }, []);
+
+  // Auto search when AI applies filters
+  useEffect(() => {
+    if (!autoSearchPending) return;
+    setAutoSearchPending(false);
+    handleSearch();
+  }, [autoSearchPending]);
+
+  // Build available options for AI chat
+  const aiAvailableOptions: AiChatAvailableOptions = useMemo(() => ({
+    periodRanges: periodRangeOptions,
+    measurementUnits: Object.entries(unitLabel).map(([value, label]) => ({ label, value })),
+    filterOptions: filterOptions
+      .filter((f) => f.value !== ALL_VALUE)
+      .map((f) => f.label),
+    metricOptions: metrics.map((m) => ({ id: m.id, name: m.name })),
+  }), [filterOptions, metrics]);
 
   const handleMeasurementChange = (value: MeasurementUnit) => {
     setMeasurementUnit(value);
@@ -635,18 +672,6 @@ export default function Home() {
 
   const isSearchDisabled = isLoadingBase || isLoadingHeatmap;
 
-  const chatContext = useMemo<ChatContext | null>(() => {
-    if (!showResults) return null;
-    return buildContext(
-      weeks,
-      selectedMetrics,
-      selectedMetrics[0]?.id ?? null,
-      seriesByEntity,
-      appliedMeasurementUnit,
-      appliedFilterValue === ALL_VALUE ? ALL_LABEL : appliedFilterValue
-    ) as ChatContext;
-  }, [showResults, weeks, selectedMetrics, seriesByEntity, appliedMeasurementUnit, appliedFilterValue]);
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     const headerEl = headerRef.current;
@@ -750,11 +775,52 @@ export default function Home() {
         {missingMetricIds.length > 0 && (
           <div className="card warning">선택한 지표 중 일부는 현재 결과에 포함되지 않습니다.</div>
         )}
+
+        {isLoadingHeatmap && (
+          <div className="inline-loading">
+            <div className="inline-loading-bar" />
+            <span className="inline-loading-text">데이터를 불러오는 중...</span>
+            <button
+              type="button"
+              className="btn-ghost inline-loading-cancel"
+              onClick={() => {
+                if (abortRef.current) abortRef.current.abort();
+                setIsFetching(false);
+              }}
+            >
+              실행취소
+            </button>
+          </div>
+        )}
+
+        {summary && !isLoadingHeatmap && (
+          <div className="kpi-summary-card card">
+            <h3 className="kpi-summary-title">{summary.title}</h3>
+            <ul className="kpi-summary-bullets">
+              {summary.bullets.map((bullet, i) => (
+                <li key={i}>{bullet}</li>
+              ))}
+            </ul>
+            {summary.caution && (
+              <p className="kpi-summary-caution">{summary.caution}</p>
+            )}
+          </div>
+        )}
+
+        {isSummaryLoading && !summary && (
+          <div className="kpi-summary-card card kpi-summary-skeleton">
+            <div className="skeleton-line skeleton-title" />
+            <div className="skeleton-line" />
+            <div className="skeleton-line" />
+            <div className="skeleton-line skeleton-short" />
+          </div>
+        )}
+
         {isLoadingBase ? (
           <div className="card subtle">지표 정보를 불러오는 중...</div>
-        ) : !showResults ? (
+        ) : !showResults && !isLoadingHeatmap ? (
           <div className="card subtle">옵션을 선택하고 조회를 눌러주세요.</div>
-        ) : (
+        ) : !isLoadingHeatmap && showResults ? (
           <div className="result-stack">
             {appliedMeasurementUnit === "all" ? (
               <MetricTable
@@ -772,14 +838,13 @@ export default function Home() {
               />
             )}
           </div>
-        )}
+        ) : null}
       </section>
 
       <AiChat
-        visible={showResults}
-        summary={summary}
-        isSummaryLoading={isSummaryLoading}
-        context={chatContext}
+        onApplyFilters={handleAiApplyFilters}
+        dashboardContext={chatContext}
+        availableOptions={aiAvailableOptions}
       />
 
       {isMetricPickerOpen && (
@@ -844,23 +909,6 @@ export default function Home() {
         </div>
       )}
 
-      {isFetching && (
-        <div className="fetch-overlay">
-          <div className="fetch-overlay-card">
-            <div className="spinner" />
-            <div className="fetch-overlay-text">데이터를 불러오는 중입니다...</div>
-            <button
-              type="button"
-              onClick={() => {
-                if (abortRef.current) abortRef.current.abort();
-                setIsFetching(false);
-              }}
-            >
-              실행취소
-            </button>
-          </div>
-        </div>
-      )}
 
       <ErrorLogPanel
         logs={errorLogs}

@@ -76,3 +76,28 @@ export type SummaryPayload = {
   bullets: string[];
   caution?: string;
 };
+
+// ─── AI Filter Action Types ───
+
+export type FilterAction = {
+  type: "apply_filters";
+  filters: {
+    periodRangeValue?: string;
+    measurementUnit?: string;
+    filterValue?: string;
+    metricIds?: string[];
+  };
+};
+
+export type AiChatAvailableOptions = {
+  periodRanges: { label: string; value: string }[];
+  measurementUnits: { label: string; value: string }[];
+  filterOptions: string[];
+  metricOptions: { id: string; name: string }[];
+};
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
