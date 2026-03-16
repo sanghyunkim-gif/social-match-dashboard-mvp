@@ -3,6 +3,8 @@ import { unstable_cache } from "next/cache";
 import { randomUUID } from "crypto";
 import { getMetricDictionary } from "../../lib/dataQueries";
 
+export const dynamic = "force-dynamic";
+
 const METRICS_CACHE_TTL = 300;
 
 const fetchMetrics = async () => {
@@ -11,7 +13,7 @@ const fetchMetrics = async () => {
   return { metrics, timings, cachedAt: Date.now() };
 };
 
-const getMetricsCached = unstable_cache(fetchMetrics, ["api-metrics-v2-with-query"], {
+const getMetricsCached = unstable_cache(fetchMetrics, ["api-metrics-v3-with-query-category"], {
   revalidate: METRICS_CACHE_TTL
 });
 

@@ -16,6 +16,8 @@ type MetricTableProps = {
   indent?: boolean;
   scrollable?: boolean;
   embedded?: boolean;
+  showDelta?: boolean;
+  onShowDeltaChange?: (next: boolean) => void;
 };
 
 const formatDelta = (metric: Metric, delta: number | null) => {
@@ -48,7 +50,9 @@ export default function MetricTable({
   dense = false,
   indent = false,
   scrollable = true,
-  embedded = false
+  embedded = false,
+  showDelta = true,
+  onShowDeltaChange
 }: MetricTableProps) {
   const weekColumnCount = weeks.length;
   const defaultWidths = useMemo(() => [220, 140, ...Array(weekColumnCount).fill(120)], [weekColumnCount]);
@@ -150,13 +154,15 @@ export default function MetricTable({
                   style={{ backgroundColor: getHeatColor(values, value) }}
                 >
                   <span className="value-main">{formatValue(value, metric)}</span>
-                  <span
-                    className={`value-delta ${delta !== null ? "has-delta" : ""} ${
-                      delta !== null && delta < 0 ? "is-negative" : ""
-                    }`}
-                  >
-                    {delta !== null ? `(${deltaLabel})` : "-"}
-                  </span>
+                  {showDelta && (
+                    <span
+                      className={`value-delta ${delta !== null ? "has-delta" : ""} ${
+                        delta !== null && delta < 0 ? "is-negative" : ""
+                      }`}
+                    >
+                      {delta !== null ? `(${deltaLabel})` : "-"}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -172,7 +178,21 @@ export default function MetricTable({
 
   return (
     <div className={wrapperClass}>
-      {title && <div className="card-title">{title}</div>}
+      {(title || onShowDeltaChange) && (
+        <div className="table-head-row">
+          {title ? <div className="card-title">{title}</div> : <div />}
+          {onShowDeltaChange && (
+            <label className="table-toggle">
+              <input
+                type="checkbox"
+                checked={showDelta}
+                onChange={(event) => onShowDeltaChange(event.target.checked)}
+              />
+              <span>증감 노출</span>
+            </label>
+          )}
+        </div>
+      )}
       {scrollable ? <div className="table-scroll">{grid}</div> : grid}
     </div>
   );

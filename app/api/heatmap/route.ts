@@ -1,19 +1,22 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { randomUUID } from "crypto";
-import { getHeatmap, getSupportedMetricIds } from "../../lib/dataQueries";
+import { getHeatmap, getMeasurementUnitIds, getSupportedMetricIds } from "../../lib/dataQueries";
 
-const allowedUnits = ["all", "area_group", "area", "stadium_group", "stadium"] as const;
+export const dynamic = "force-dynamic";
+
 const MAX_WEEKS = 104;
 const HEATMAP_CACHE_TTL = 180;
 const SUPPORTED_METRIC_IDS_CACHE_TTL = 3600;
 
 type HeatmapRequestBody = {
-  measureUnit: (typeof allowedUnits)[number];
+  measureUnit: string;
   weeks: string[];
   metrics: string[];
   filterValue?: string | null;
   primaryMetricId?: string;
+  parentUnit?: string | null;
+  parentValue?: string | null;
 };
 
 const buildHeatmapCacheKey = (params: {
@@ -21,11 +24,17 @@ const buildHeatmapCacheKey = (params: {
   filterValue: string | null;
   weeks: string[];
   metrics: string[];
+  parentUnit?: string | null;
+  parentValue?: string | null;
 }) => {
   const filterKey = params.filterValue && params.filterValue.trim() !== "" ? params.filterValue.trim() : "all";
   const weeksKey = params.weeks.join("|");
   const metricsKey = params.metrics.join("|");
-  return `heatmap:${params.measureUnit}:${filterKey}:${weeksKey}:${metricsKey}`;
+  const parentKey =
+    params.parentUnit && params.parentValue
+      ? `${params.parentUnit}:${params.parentValue.trim()}`
+      : "none";
+  return `heatmap:${params.measureUnit}:${filterKey}:${weeksKey}:${metricsKey}:${parentKey}`;
 };
 
 const getSupportedMetricIdsCached = unstable_cache(
@@ -45,7 +54,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { measureUnit, filterValue, weeks, metrics, primaryMetricId } = payload;
+  const { measureUnit, filterValue, weeks, metrics, primaryMetricId, parentUnit, parentValue } = payload;
 
   if (Array.isArray(weeks) && weeks.length > 0) {
     const firstWeek = weeks[0];
@@ -58,7 +67,9 @@ export async function POST(request: Request) {
       firstWeek,
       lastWeek,
       metricsLength: Array.isArray(metrics) ? metrics.length : null,
-      primaryMetricId
+      primaryMetricId,
+      parentUnit,
+      parentValue
     });
   } else {
     console.log("[heatmap] request", {
@@ -67,7 +78,9 @@ export async function POST(request: Request) {
       filterValue,
       weeksLength: Array.isArray(weeks) ? weeks.length : null,
       metricsLength: Array.isArray(metrics) ? metrics.length : null,
-      primaryMetricId
+      primaryMetricId,
+      parentUnit,
+      parentValue
     });
   }
 
@@ -76,7 +89,9 @@ export async function POST(request: Request) {
     weeks: "string[]",
     metrics: "string[]",
     filterValue: "string|null (optional)",
-    primaryMetricId: "string (optional)"
+    primaryMetricId: "string (optional)",
+    parentUnit: "string|null (optional)",
+    parentValue: "string|null (optional)"
   };
 
   const badRequest = (reason: string) => {
@@ -96,8 +111,9 @@ export async function POST(request: Request) {
     );
   };
 
-  if (!measureUnit || !allowedUnits.includes(measureUnit as (typeof allowedUnits)[number])) {
-    return badRequest("measureUnit is required and must be one of: all, area_group, area, stadium_group, stadium");
+  const allowedUnits = new Set(await getMeasurementUnitIds());
+  if (!measureUnit || !allowedUnits.has(measureUnit)) {
+    return badRequest("measureUnit is required and must be a supported measurement unit");
   }
 
   if (!Array.isArray(weeks) || weeks.length === 0 || weeks.length > MAX_WEEKS) {
@@ -106,6 +122,14 @@ export async function POST(request: Request) {
 
   if (filterValue !== null && filterValue !== undefined && typeof filterValue !== "string") {
     return badRequest("filterValue must be a string or null");
+  }
+  if (parentUnit !== null && parentUnit !== undefined) {
+    if (typeof parentUnit !== "string" || !allowedUnits.has(parentUnit)) {
+      return badRequest("parentUnit must be a supported measurement unit");
+    }
+  }
+  if (parentValue !== null && parentValue !== undefined && typeof parentValue !== "string") {
+    return badRequest("parentValue must be a string or null");
   }
 
   if (!Array.isArray(metrics) || metrics.length === 0) {
@@ -123,11 +147,16 @@ export async function POST(request: Request) {
 
   try {
     const normalizedFilter = filterValue && filterValue.trim() !== "" ? filterValue : null;
+    const normalizedParentUnit = parentUnit && parentUnit !== "all" ? parentUnit : null;
+    const normalizedParentValue =
+      parentValue && parentValue.trim() !== "" ? parentValue.trim() : null;
     const cacheKey = buildHeatmapCacheKey({
       measureUnit,
       filterValue: normalizedFilter,
       weeks,
-      metrics: metricIds
+      metrics: metricIds,
+      parentUnit: normalizedParentUnit,
+      parentValue: normalizedParentValue
     });
 
     const getHeatmapCached = unstable_cache(
@@ -135,16 +164,18 @@ export async function POST(request: Request) {
         const timings: { queryMs?: number; processMs?: number } = {};
         const rows = await getHeatmap(
           {
-            measureUnit: measureUnit as (typeof allowedUnits)[number],
+            measureUnit,
             filterValue: normalizedFilter,
             weeks,
-            metrics: metricIds ? [...metricIds] : undefined
+            metrics: metricIds ? [...metricIds] : undefined,
+            parentUnit: normalizedParentUnit,
+            parentValue: normalizedParentValue
           },
           timings
         );
         return { rows, timings, cachedAt: Date.now() };
       },
-      ["api-heatmap", cacheKey],
+      ["api-heatmap-v2", cacheKey],
       { revalidate: HEATMAP_CACHE_TTL }
     );
 

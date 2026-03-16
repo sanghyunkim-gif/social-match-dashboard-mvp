@@ -1,26 +1,78 @@
 "use client";
 
-import { useState } from "react";
-import { createClient } from "@/app/lib/supabase/client";
+import { useEffect, useState } from "react";
+import { createClient, isSupabaseBrowserEnvConfigured } from "@/app/lib/supabase/client";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const run = async () => {
+      if (typeof window === "undefined") return;
+
+      const canonicalUrl = process.env.NEXT_PUBLIC_APP_URL;
+      if (canonicalUrl) {
+        const canonicalOrigin = new URL(canonicalUrl).origin;
+        if (window.location.origin !== canonicalOrigin) {
+          const target = `${canonicalOrigin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.replace(target);
+          return;
+        }
+      }
+
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      if (!code) return;
+      if (!isSupabaseBrowserEnvConfigured()) return;
+
+      setLoading(true);
+      setError(null);
+      try {
+        const supabase = createClient();
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) {
+          setError(exchangeError.message);
+          return;
+        }
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+        window.location.replace(appUrl);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void run();
+  }, []);
+
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    try {
+      if (!isSupabaseBrowserEnvConfigured()) {
+        setError("배포 환경변수(NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY)가 설정되지 않았습니다.");
+        setLoading(false);
+        return;
+      }
 
-    if (error) {
-      setError(error.message);
+      const supabase = createClient();
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${appUrl}/auth/callback`,
+        },
+      });
+
+      if (error) {
+        setError(error.message);
+      }
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
       setLoading(false);
     }
   };

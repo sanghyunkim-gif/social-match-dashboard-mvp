@@ -1,20 +1,19 @@
 export type PeriodUnit = "week";
 
-export type MeasurementUnit =
-  | "all"
-  | "area_group"
-  | "area"
-  | "stadium_group"
-  | "stadium"
-  | "region_group"
-  | "region"
-  | "court";
+export type MeasurementUnit = string;
+
+export type MeasurementUnitOption = {
+  value: MeasurementUnit;
+  label: string;
+};
 
 export type Metric = {
   id: string;
   name: string;
   description: string;
   query?: string;
+  category2?: string | null;
+  category3?: string | null;
   format: "number" | "percent";
 };
 

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { getWeeksData } from "../../lib/dataQueries";
 
+export const dynamic = "force-dynamic";
+
 const MAX_WEEKS = 520;
 const DEFAULT_WEEKS = 104;
 const WEEKS_CACHE_TTL = 3600;

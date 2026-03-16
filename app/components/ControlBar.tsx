@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { FilterOption, FilterTemplate, MeasurementUnit, Metric, PeriodUnit } from "../types";
-import SegmentedButtonGroup from "./SegmentedButtonGroup";
+import {
+  FilterOption,
+  FilterTemplate,
+  MeasurementUnit,
+  MeasurementUnitOption,
+  Metric,
+  PeriodUnit
+} from "../types";
 
 type ControlBarProps = {
   periodUnit: PeriodUnit;
@@ -8,6 +14,7 @@ type ControlBarProps = {
   periodRangeOptions: { label: string; value: string }[];
   onPeriodRangeChange: (value: string) => void;
   measurementUnit: MeasurementUnit;
+  measurementUnitOptions: MeasurementUnitOption[];
   onMeasurementUnitChange: (value: MeasurementUnit) => void;
   filterOptions: FilterOption[];
   filterValue: string;
@@ -34,6 +41,7 @@ export default function ControlBar({
   periodRangeOptions,
   onPeriodRangeChange,
   measurementUnit,
+  measurementUnitOptions,
   onMeasurementUnitChange,
   filterOptions,
   filterValue,
@@ -90,7 +98,7 @@ export default function ControlBar({
     setEditingName("");
   };
 
-  const currentUserId = templates.find((t) => t.id === activeTemplateId)?.user_id;
+  const currentUserId = templates.find((template) => template.id === activeTemplateId)?.user_id;
 
   return (
     <div className="search-panel card">
@@ -101,10 +109,10 @@ export default function ControlBar({
             <button
               type="button"
               className={`btn-template-select ${isTemplateDropdownOpen ? "is-open" : ""}`}
-              onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
+              onClick={() => setIsTemplateDropdownOpen((prev) => !prev)}
             >
               {activeTemplateId
-                ? templates.find((t) => t.id === activeTemplateId)?.name ?? "선택"
+                ? templates.find((template) => template.id === activeTemplateId)?.name ?? "선택"
                 : "선택"}
               <span className="template-caret" />
             </button>
@@ -134,10 +142,10 @@ export default function ControlBar({
                           type="text"
                           className="template-edit-input"
                           value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleRename(template.id);
-                            if (e.key === "Escape") setEditingId(null);
+                          onChange={(event) => setEditingName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") handleRename(template.id);
+                            if (event.key === "Escape") setEditingId(null);
                           }}
                           autoFocus
                         />
@@ -172,8 +180,8 @@ export default function ControlBar({
                                 <button
                                   type="button"
                                   className="template-action-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                                  onClick={(event) => {
+                                    event.stopPropagation();
                                     onSetDefaultTemplate(template.id);
                                   }}
                                   title="기본 템플릿으로 설정"
@@ -184,8 +192,8 @@ export default function ControlBar({
                               <button
                                 type="button"
                                 className="template-action-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                onClick={(event) => {
+                                  event.stopPropagation();
                                   setEditingId(template.id);
                                   setEditingName(template.name);
                                 }}
@@ -196,8 +204,8 @@ export default function ControlBar({
                               <button
                                 type="button"
                                 className="template-action-btn template-action-delete"
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                onClick={(event) => {
+                                  event.stopPropagation();
                                   onDeleteTemplate(template.id);
                                 }}
                                 title="삭제"
@@ -234,19 +242,16 @@ export default function ControlBar({
             ))}
           </select>
         </label>
-        <SegmentedButtonGroup
-          className="measurement search-field-measurement"
-          label="측정단위"
-          value={measurementUnit}
-          onChange={onMeasurementUnitChange}
-          options={[
-            { value: "all", label: "전체" },
-            { value: "area_group", label: "지역 그룹" },
-            { value: "area", label: "지역" },
-            { value: "stadium_group", label: "구장 그룹" },
-            { value: "stadium", label: "구장" }
-          ]}
-        />
+        <label className="field search-field search-field-measurement-select">
+          <span className="field-label">측정단위</span>
+          <select value={measurementUnit} onChange={(event) => onMeasurementUnitChange(event.target.value)}>
+            {measurementUnitOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="field search-field search-field-filter">
           <span className="field-label">필터</span>
           <select value={filterValue} onChange={(event) => onFilterChange(event.target.value)}>
@@ -262,7 +267,7 @@ export default function ControlBar({
         </button>
         <div className="search-action-group">
           <button type="button" className="btn-primary search-submit-btn" onClick={onSearch} disabled={isSearchDisabled}>
-            조회 및 AI 자동 분석
+            조회 및 AI 분석
           </button>
         </div>
       </div>
@@ -271,14 +276,14 @@ export default function ControlBar({
         <button type="button" className="btn-secondary search-metric-picker-btn" onClick={onOpenMetricPicker}>
           지표 선택
         </button>
-        <span className="field-label">활성 지표:</span>
+        <span className="field-label">활성 지표</span>
         <div className="selected-metric-chips">
           {selectedMetrics.map((metric) => (
             <button
               key={metric.id}
               type="button"
               className="selected-metric-chip is-active"
-              title={`${metric.description || metric.name} (클릭 시 비활성)`}
+              title={`${metric.description || metric.name} (클릭 시 해제)`}
               onClick={() => onRemoveSelectedMetric(metric.id)}
               aria-pressed
             >
@@ -293,7 +298,7 @@ export default function ControlBar({
 
       {isSaveDialogOpen && (
         <div className="template-save-overlay" onClick={() => setIsSaveDialogOpen(false)}>
-          <div className="template-save-dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="template-save-dialog" onClick={(event) => event.stopPropagation()}>
             <div className="template-save-header">
               <span className="card-title">템플릿 저장</span>
               <button
@@ -310,10 +315,10 @@ export default function ControlBar({
                 <input
                   type="text"
                   value={saveName}
-                  onChange={(e) => setSaveName(e.target.value)}
-                  placeholder="예: 강남 주간 분석"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleSave();
+                  onChange={(event) => setSaveName(event.target.value)}
+                  placeholder="예: 경기 주간 분석"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") handleSave();
                   }}
                   autoFocus
                 />
@@ -323,15 +328,15 @@ export default function ControlBar({
                   <input
                     type="checkbox"
                     checked={saveIsShared}
-                    onChange={(e) => setSaveIsShared(e.target.checked)}
+                    onChange={(event) => setSaveIsShared(event.target.checked)}
                   />
-                  <span>팀에 공유</span>
+                  <span>전체 공유</span>
                 </label>
                 <label className="template-checkbox">
                   <input
                     type="checkbox"
                     checked={saveIsDefault}
-                    onChange={(e) => setSaveIsDefault(e.target.checked)}
+                    onChange={(event) => setSaveIsDefault(event.target.checked)}
                   />
                   <span>기본 템플릿으로 설정</span>
                 </label>

@@ -49,6 +49,7 @@ const metricColumnBlacklist = new Set([
 ]);
 
 const UNITS = ["all", "area_group", "area", "stadium_group", "stadium"];
+const WEEK_FETCH_PAGE_SIZE = 500;
 
 const isRateMetric = (metricId) => metricId.endsWith("_rate");
 
@@ -67,6 +68,12 @@ const unitFilterValue = (unit, row) => {
   if (unit === "stadium_group") return row.stadium_group;
   if (unit === "stadium") return row.stadium;
   return null;
+};
+
+const parseWeekStartTime = (week) => {
+  const match = String(week ?? "").trim().match(/^(\d{2}\.\d{2}\.\d{2})/);
+  if (!match) return Number.NEGATIVE_INFINITY;
+  return Date.parse(`20${match[1].replace(/\./g, "-")}T00:00:00Z`);
 };
 
 function aggregateMetric(metricId, values) {
@@ -119,19 +126,46 @@ async function getSupportedMetrics() {
   return metrics;
 }
 
+async function getRecentWeeks(limit) {
+  const uniqueWeeks = [];
+  const seen = new Set();
+  let from = 0;
+
+  while (uniqueWeeks.length < limit) {
+    const to = from + WEEK_FETCH_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .schema("bigquery")
+      .from("weekly_agg_mv")
+      .select("week")
+      .eq("measure_unit", "all")
+      .eq("filter_value", "전체")
+      .order("week", { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+
+    const rows = data ?? [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const week = String(row.week ?? "").trim();
+      if (!week || seen.has(week)) continue;
+      seen.add(week);
+      uniqueWeeks.push(week);
+      if (uniqueWeeks.length >= limit) break;
+    }
+
+    if (rows.length < WEEK_FETCH_PAGE_SIZE) break;
+    from += WEEK_FETCH_PAGE_SIZE;
+  }
+
+  return uniqueWeeks.sort((a, b) => parseWeekStartTime(b) - parseWeekStartTime(a));
+}
+
 async function main() {
   const METRICS = await getSupportedMetrics();
   if (METRICS.length === 0) throw new Error("No supported metrics found for validation.");
-
-  const { data: weekRows, error: weekErr } = await supabase
-    .schema("bigquery")
-    .from("weeks_view")
-    .select("week")
-    .order("week_start_date", { ascending: false })
-    .limit(WEEKS);
-  if (weekErr) throw weekErr;
-  const weeks = (weekRows ?? []).map((row) => row.week);
-  if (weeks.length === 0) throw new Error("No weeks from weeks_view");
+  const weeks = await getRecentWeeks(WEEKS);
+  if (weeks.length === 0) throw new Error("No recent weeks from weekly_agg_mv");
 
   const expectedMap = new Map();
   let sourceRows = 0;

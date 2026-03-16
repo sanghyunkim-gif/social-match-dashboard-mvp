@@ -1,26 +1,46 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import { getFilterOptions } from "../../lib/dataQueries";
+import { getFilterOptions, getMeasurementUnitIds } from "../../lib/dataQueries";
 
-const allowedUnits = ["all", "area_group", "area", "stadium_group", "stadium"] as const;
+export const dynamic = "force-dynamic";
+
 const FILTER_OPTIONS_CACHE_TTL = 600;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const measureUnit = searchParams.get("measureUnit");
+  const parentUnit = searchParams.get("parentUnit");
+  const parentValue = searchParams.get("parentValue");
+  const weeks = searchParams
+    .getAll("week")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  const allowedUnits = new Set(await getMeasurementUnitIds());
 
-  if (!measureUnit || !allowedUnits.includes(measureUnit as (typeof allowedUnits)[number])) {
+  if (!measureUnit || !allowedUnits.has(measureUnit)) {
     return NextResponse.json({ error: "Invalid measureUnit." }, { status: 400 });
+  }
+  if (parentUnit && !allowedUnits.has(parentUnit)) {
+    return NextResponse.json({ error: "Invalid parentUnit." }, { status: 400 });
   }
 
   try {
-    const unit = measureUnit as (typeof allowedUnits)[number];
+    const normalizedParentValue = parentValue && parentValue.trim().length > 0 ? parentValue.trim() : null;
+    const normalizedParentUnit = parentUnit && parentUnit !== "all" ? parentUnit : null;
+    const cacheSuffix =
+      normalizedParentUnit && normalizedParentValue
+        ? `${normalizedParentUnit}:${normalizedParentValue}`
+        : "none";
     const getFilterOptionsCached = unstable_cache(
       async () => {
-        const options = await getFilterOptions(unit);
+        const options = await getFilterOptions(measureUnit, {
+          parentUnit: normalizedParentUnit,
+          parentValue: normalizedParentValue,
+          weeks
+        });
         return { options, cachedAt: Date.now() };
       },
-      ["api-filter-options", unit],
+      ["api-filter-options-v3", measureUnit, cacheSuffix],
       { revalidate: FILTER_OPTIONS_CACHE_TTL }
     );
 

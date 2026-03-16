@@ -25,9 +25,16 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: { id: string } | null = null;
+  try {
+    const {
+      data: { user: fetchedUser }
+    } = await supabase.auth.getUser();
+    user = fetchedUser ? { id: fetchedUser.id } : null;
+  } catch {
+    // Network/transient Supabase errors should not force-login-loop.
+    return supabaseResponse;
+  }
 
   // 미인증 사용자 → /login 리다이렉트
   if (
