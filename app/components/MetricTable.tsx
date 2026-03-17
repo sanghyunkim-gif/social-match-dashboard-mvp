@@ -31,13 +31,13 @@ const formatDelta = (metric: Metric, delta: number | null) => {
 };
 
 const getHeatColor = (values: number[], value: number) => {
-  if (!values.length) return "rgba(37, 99, 235, 0.04)";
+  if (!values.length) return "rgba(13, 148, 136, 0.04)";
   const min = Math.min(...values);
   const max = Math.max(...values);
-  if (min === max) return "rgba(37, 99, 235, 0.08)";
+  if (min === max) return "rgba(13, 148, 136, 0.08)";
   const ratio = (value - min) / (max - min);
   const intensity = 0.04 + ratio * 0.25;
-  return `rgba(37, 99, 235, ${intensity})`;
+  return `rgba(13, 148, 136, ${intensity})`;
 };
 
 export default function MetricTable({
@@ -100,6 +100,12 @@ export default function MetricTable({
       {showHeader && (
         <div className="data-row data-header" style={{ gridTemplateColumns } as CSSProperties}>
           <div className="data-cell data-name is-resizable">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="header-icon">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
             지표
             <button
               type="button"
@@ -109,6 +115,10 @@ export default function MetricTable({
             />
           </div>
           <div className="data-cell data-spark is-resizable">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="header-icon">
+              <polyline points="3 17 9 11 13 15 21 7" />
+              <polyline points="17 7 21 7 21 11" />
+            </svg>
             추이
             <button
               type="button"

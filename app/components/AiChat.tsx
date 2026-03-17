@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatContext, ChatMessage, FilterAction, AiChatAvailableOptions } from "../types";
+import type { ChatContext, ChatMessage, ChartConfig, FilterAction, AiChatAvailableOptions } from "../types";
 import ChatMessageRenderer from "./chat/ChatMessageRenderer";
 
 const INITIAL_SUGGESTIONS = [
@@ -10,106 +10,138 @@ const INITIAL_SUGGESTIONS = [
   "최근 추이를 보고 싶어",
 ];
 
+type ChatSession = {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  dynamicSuggestions: string[];
+};
+
 type AiChatProps = {
   onApplyFilters: (filters: FilterAction["filters"]) => void;
   dashboardContext: ChatContext | null;
   availableOptions: AiChatAvailableOptions;
+  isOpen: boolean;
+  onToggle: () => void;
 };
 
-export default function AiChat({ onApplyFilters, dashboardContext, availableOptions }: AiChatProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+const newSessionId = () => `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+const FIRST_SESSION_ID = "s-initial";
+
+export default function AiChat({ onApplyFilters, dashboardContext, availableOptions, isOpen, onToggle }: AiChatProps) {
+  const [sessions, setSessions] = useState<ChatSession[]>([
+    { id: FIRST_SESSION_ID, title: "새 대화", messages: [], dynamicSuggestions: [] },
+  ]);
+  const [activeSessionId, setActiveSessionId] = useState(FIRST_SESSION_ID);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [dynamicSuggestions, setDynamicSuggestions] = useState<string[]>([]);
   const [filterAppliedNotice, setFilterAppliedNotice] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingAnalysisRef = useRef(false);
   const prevContextRef = useRef<ChatContext | null>(null);
 
-  // Auto-scroll
+  const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
+  const messages = activeSession.messages;
+  const dynamicSuggestions = activeSession.dynamicSuggestions;
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages.length, isLoading]);
 
-  // ESC to collapse
   useEffect(() => {
-    if (!isExpanded) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsExpanded(false);
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [isExpanded]);
+    if (isOpen) setTimeout(() => inputRef.current?.focus(), 100);
+  }, [isOpen, activeSessionId]);
 
-  // Auto-expand when messages arrive
-  useEffect(() => {
-    if (messages.length > 0) setIsExpanded(true);
-  }, [messages.length]);
-
-  // When dashboardContext updates after filter apply, auto-send analysis request
   useEffect(() => {
     if (!pendingAnalysisRef.current || !dashboardContext) return;
     if (dashboardContext === prevContextRef.current) return;
     prevContextRef.current = dashboardContext;
     pendingAnalysisRef.current = false;
     setFilterAppliedNotice(null);
-
-    const analyzeMessage = "대시보드에 표시된 데이터를 분석해줘.";
-    requestAnalysis(analyzeMessage);
+    requestAnalysis("대시보드에 표시된 데이터를 분석해줘.");
   }, [dashboardContext]);
+
+  const handleNewSession = () => {
+    const id = newSessionId();
+    setSessions((prev) => [
+      ...prev,
+      { id, title: `대화 ${prev.length + 1}`, messages: [], dynamicSuggestions: [] },
+    ]);
+    setActiveSessionId(id);
+    setInput("");
+    setIsLoading(false);
+    setFilterAppliedNotice(null);
+  };
+
+  const handleCloseSession = (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    if (sessions.length <= 1) return;
+    setSessions((prev) => {
+      const next = prev.filter((s) => s.id !== sessionId);
+      if (activeSessionId === sessionId) {
+        setActiveSessionId(next[next.length - 1].id);
+      }
+      return next;
+    });
+  };
+
+  const handleSwitchSession = (sessionId: string) => {
+    if (sessionId === activeSessionId) return;
+    setActiveSessionId(sessionId);
+    setInput("");
+    setIsLoading(false);
+    setFilterAppliedNotice(null);
+  };
 
   const requestAnalysis = useCallback(
     async (text: string) => {
-      const userMsg: ChatMessage = {
-        id: `${Date.now()}-system`,
-        role: "user",
-        content: text,
-      };
+      const sid = activeSessionId;
+      const userMsg: ChatMessage = { id: `${Date.now()}-system`, role: "user", content: text };
+      const apiMessages = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
 
-      setMessages((prev) => [...prev, userMsg]);
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sid ? { ...s, messages: [...s.messages, userMsg], dynamicSuggestions: [] } : s
+        )
+      );
       setIsLoading(true);
-      setDynamicSuggestions([]);
 
       try {
-        const allMessages = [...messages, userMsg];
-        const apiMessages = allMessages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-
         const res = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: apiMessages,
-            context: dashboardContext,
-            availableOptions,
-          }),
+          body: JSON.stringify({ messages: apiMessages, context: dashboardContext, availableOptions }),
         });
-
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error((err as { error?: string }).error || "응답 실패");
         }
-
         const data = (await res.json()) as {
           reply: string;
           action?: FilterAction;
           recommendations?: string[];
+          charts?: ChartConfig[];
         };
-
-        if (data.recommendations?.length) {
-          setDynamicSuggestions(data.recommendations);
-        }
 
         const assistantMsg: ChatMessage = {
           id: `${Date.now()}-assistant`,
           role: "assistant",
           content: data.reply,
+          charts: data.charts?.length ? data.charts : undefined,
         };
-        setMessages((prev) => [...prev, assistantMsg]);
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sid
+              ? {
+                  ...s,
+                  messages: [...s.messages, assistantMsg],
+                  dynamicSuggestions: data.recommendations?.length ? data.recommendations : [],
+                }
+              : s
+          )
+        );
 
         if (data.action?.type === "apply_filters") {
           pendingAnalysisRef.current = true;
@@ -117,75 +149,85 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
           onApplyFilters(data.action.filters);
         }
       } catch (error) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `${Date.now()}-error`,
-            role: "assistant",
-            content: `오류가 발생했습니다: ${(error as Error).message}`,
-          },
-        ]);
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sid
+              ? {
+                  ...s,
+                  messages: [
+                    ...s.messages,
+                    {
+                      id: `${Date.now()}-error`,
+                      role: "assistant" as const,
+                      content: `오류가 발생했습니다: ${(error as Error).message}`,
+                    },
+                  ],
+                }
+              : s
+          )
+        );
       } finally {
         setIsLoading(false);
       }
     },
-    [messages, dashboardContext, availableOptions, onApplyFilters]
+    [activeSessionId, messages, dashboardContext, availableOptions, onApplyFilters]
   );
 
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isLoading) return;
+      const sid = activeSessionId;
+      const userMsg: ChatMessage = { id: `${Date.now()}-user`, role: "user", content: text.trim() };
+      const apiMessages = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
+      const isFirst = messages.length === 0;
+      const autoTitle = isFirst
+        ? text.trim().slice(0, 20) + (text.trim().length > 20 ? "..." : "")
+        : undefined;
 
-      const userMsg: ChatMessage = {
-        id: `${Date.now()}-user`,
-        role: "user",
-        content: text.trim(),
-      };
-
-      const nextMessages = [...messages, userMsg];
-      setMessages(nextMessages);
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sid
+            ? { ...s, messages: [...s.messages, userMsg], dynamicSuggestions: [], ...(autoTitle ? { title: autoTitle } : {}) }
+            : s
+        )
+      );
       setInput("");
       setIsLoading(true);
-      setDynamicSuggestions([]);
-      setIsExpanded(true);
 
       try {
-        const apiMessages = nextMessages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-
         const res = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: apiMessages,
-            context: dashboardContext,
-            availableOptions,
-          }),
+          body: JSON.stringify({ messages: apiMessages, context: dashboardContext, availableOptions }),
         });
-
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error((err as { error?: string }).error || "응답 실패");
         }
-
         const data = (await res.json()) as {
           reply: string;
           action?: FilterAction;
           recommendations?: string[];
+          charts?: ChartConfig[];
         };
-
-        if (data.recommendations?.length) {
-          setDynamicSuggestions(data.recommendations);
-        }
 
         const assistantMsg: ChatMessage = {
           id: `${Date.now()}-assistant`,
           role: "assistant",
           content: data.reply,
+          charts: data.charts?.length ? data.charts : undefined,
         };
-        setMessages((prev) => [...prev, assistantMsg]);
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sid
+              ? {
+                  ...s,
+                  messages: [...s.messages, assistantMsg],
+                  dynamicSuggestions: data.recommendations?.length ? data.recommendations : [],
+                }
+              : s
+          )
+        );
 
         if (data.action?.type === "apply_filters") {
           pendingAnalysisRef.current = true;
@@ -193,218 +235,181 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
           onApplyFilters(data.action.filters);
         }
       } catch (error) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `${Date.now()}-error`,
-            role: "assistant",
-            content: `오류가 발생했습니다: ${(error as Error).message}`,
-          },
-        ]);
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sid
+              ? {
+                  ...s,
+                  messages: [
+                    ...s.messages,
+                    {
+                      id: `${Date.now()}-error`,
+                      role: "assistant" as const,
+                      content: `오류가 발생했습니다: ${(error as Error).message}`,
+                    },
+                  ],
+                }
+              : s
+          )
+        );
       } finally {
         setIsLoading(false);
       }
     },
-    [messages, isLoading, dashboardContext, availableOptions, onApplyFilters]
+    [activeSessionId, messages, isLoading, dashboardContext, availableOptions, onApplyFilters]
   );
 
   const handleRecommendationSelect = useCallback(
-    (question: string) => {
-      sendMessage(question);
-    },
+    (question: string) => sendMessage(question),
     [sendMessage]
   );
 
   const showInitialSuggestions = messages.length === 0 && !isLoading && dynamicSuggestions.length === 0;
 
+  if (!isOpen) {
+    return (
+      <button type="button" className="ai-panel-toggle-btn" onClick={onToggle} aria-label="AI 채팅 열기">
+        <img src="/ai-avatar.png" alt="AI" width={24} height={24} style={{ borderRadius: "50%" }} />
+        <span>AI</span>
+      </button>
+    );
+  }
+
   return (
-    <div className={`ai-bottom-bar${isExpanded ? " is-expanded" : ""}`}>
-      {/* Expandable messages area */}
-      {isExpanded && (
-        <div className="ai-bottom-panel">
-          <div className="ai-bottom-header">
-            <div className="ai-bottom-header-left">
-              <img
-                src="/ai-avatar.png"
-                alt=""
-                className="ai-chat-header-avatar"
-                width={28}
-                height={28}
-              />
-              <span className="ai-chat-header-title">KEVIN AI</span>
-              <span className="ai-chat-header-badge">Assistant</span>
-            </div>
+    <aside className="ai-side-panel">
+      <div className="ai-panel-header">
+        <div className="ai-panel-header-left">
+          <img src="/ai-avatar.png" alt="" className="ai-chat-header-avatar" width={24} height={24} />
+          <span className="ai-chat-header-title">KEVIN AI</span>
+          <span className="ai-chat-header-badge">Assistant</span>
+        </div>
+        <div className="ai-panel-header-actions">
+          <button type="button" className="ai-panel-action-btn" onClick={handleNewSession} title="새 대화">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+          <button type="button" className="ai-panel-action-btn" onClick={onToggle} aria-label="패널 닫기">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="13 17 18 12 13 7" />
+              <polyline points="6 17 11 12 6 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {sessions.length > 1 && (
+        <div className="ai-session-tabs">
+          {sessions.map((s) => (
             <button
+              key={s.id}
               type="button"
-              className="ai-chat-close"
-              onClick={() => setIsExpanded(false)}
-              aria-label="채팅 닫기"
+              className={`ai-session-tab${s.id === activeSessionId ? " is-active" : ""}`}
+              onClick={() => handleSwitchSession(s.id)}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="ai-bottom-messages">
-            {messages.length === 0 && (
-              <div className="ai-chat-empty">
-                원하는 데이터를 자연어로 요청해보세요.<br />
-                AI가 대시보드 필터를 자동으로 설정합니다.
-              </div>
-            )}
-
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`ai-chat-bubble ${msg.role}`}
+              <span className="ai-session-tab-title">{s.title}</span>
+              <span
+                className="ai-session-tab-close"
+                onClick={(e) => handleCloseSession(e, s.id)}
+                role="button"
+                tabIndex={0}
               >
-                {msg.role === "assistant" && (
-                  <img
-                    src="/ai-avatar.png"
-                    alt=""
-                    className="ai-bubble-avatar"
-                    width={24}
-                    height={24}
-                  />
-                )}
-                <div className="ai-bubble-content">
-                  <ChatMessageRenderer
-                    blocks={[{ type: "text", content: msg.content }]}
-                    onRecommendationSelect={handleRecommendationSelect}
-                  />
-                </div>
-              </div>
-            ))}
-
-            {filterAppliedNotice && (
-              <div className="ai-chat-bubble assistant">
-                <img
-                  src="/ai-avatar.png"
-                  alt=""
-                  className="ai-bubble-avatar"
-                  width={24}
-                  height={24}
-                />
-                <div className="ai-bubble-content">
-                  <div className="ai-filter-notice">
-                    <div className="ai-typing">
-                      <span /><span /><span />
-                    </div>
-                    <div className="ai-loading-label">{filterAppliedNotice}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {isLoading && (
-              <div className="ai-chat-bubble assistant">
-                <img
-                  src="/ai-avatar.png"
-                  alt=""
-                  className="ai-bubble-avatar"
-                  width={24}
-                  height={24}
-                />
-                <div className="ai-bubble-content">
-                  <div className="ai-agent-loading">
-                    <div className="ai-typing">
-                      <span /><span /><span />
-                    </div>
-                    <div className="ai-loading-label">답변 생성 중...</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Dynamic suggestion chips */}
-          {dynamicSuggestions.length > 0 && !isLoading && (
-            <div className="ai-suggestions">
-              {dynamicSuggestions.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className="ai-suggestion-chip"
-                  onClick={() => sendMessage(s)}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
+                ×
+              </span>
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Initial suggestion chips (shown when collapsed and no messages) */}
-      {!isExpanded && showInitialSuggestions && (
-        <div className="ai-bottom-suggestions">
-          {INITIAL_SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="ai-suggestion-chip"
-              onClick={() => sendMessage(s)}
-            >
+      <div className="ai-panel-messages">
+        {messages.length === 0 && (
+          <div className="ai-chat-empty">
+            원하는 데이터를 자연어로 요청해보세요.
+            <br />
+            AI가 대시보드 필터를 자동으로 설정합니다.
+          </div>
+        )}
+
+        {messages.map((msg) => (
+          <div key={msg.id} className={`ai-chat-bubble ${msg.role}`}>
+            {msg.role === "assistant" && (
+              <img src="/ai-avatar.png" alt="" className="ai-bubble-avatar" width={24} height={24} />
+            )}
+            <div className="ai-bubble-content">
+              <ChatMessageRenderer
+                blocks={[
+                  { type: "text" as const, content: msg.content },
+                  ...(msg.charts?.map((c) => ({ type: "chart" as const, config: c })) ?? []),
+                ]}
+                onRecommendationSelect={handleRecommendationSelect}
+              />
+            </div>
+          </div>
+        ))}
+
+        {filterAppliedNotice && (
+          <div className="ai-chat-bubble assistant">
+            <img src="/ai-avatar.png" alt="" className="ai-bubble-avatar" width={24} height={24} />
+            <div className="ai-bubble-content">
+              <div className="ai-filter-notice">
+                <div className="ai-typing"><span /><span /><span /></div>
+                <div className="ai-loading-label">{filterAppliedNotice}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isLoading && (
+          <div className="ai-chat-bubble assistant">
+            <img src="/ai-avatar.png" alt="" className="ai-bubble-avatar" width={24} height={24} />
+            <div className="ai-bubble-content">
+              <div className="ai-agent-loading">
+                <div className="ai-typing"><span /><span /><span /></div>
+                <div className="ai-loading-label">답변 생성 중...</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {(showInitialSuggestions || (dynamicSuggestions.length > 0 && !isLoading)) && (
+        <div className="ai-panel-suggestions">
+          {(showInitialSuggestions ? INITIAL_SUGGESTIONS : dynamicSuggestions).map((s) => (
+            <button key={s} type="button" className="ai-suggestion-chip" onClick={() => sendMessage(s)}>
               {s}
             </button>
           ))}
         </div>
       )}
 
-      {/* Fixed input bar */}
-      <div className="ai-bottom-input-bar">
-        <img
-          src="/ai-avatar.png"
-          alt="AI"
-          className="ai-bottom-avatar"
-          width={32}
-          height={32}
-        />
+      <div className="ai-panel-input-area">
         <input
           ref={inputRef}
           type="text"
-          className="ai-bottom-input"
+          className="ai-panel-input"
           value={input}
-          placeholder="KEVIN AI에게 데이터를 질문하세요..."
+          placeholder="데이터를 질문하세요..."
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              sendMessage(input);
-            }
-          }}
-          onFocus={() => {
-            if (messages.length > 0) setIsExpanded(true);
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) sendMessage(input);
           }}
           disabled={isLoading}
         />
         <button
           type="button"
-          className="ai-bottom-send"
+          className="ai-panel-send"
           onClick={() => sendMessage(input)}
           disabled={isLoading || !input.trim()}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="22" y1="2" x2="11" y2="13" />
             <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
         </button>
-        {isExpanded && messages.length > 0 && (
-          <button
-            type="button"
-            className="ai-bottom-collapse"
-            onClick={() => setIsExpanded(false)}
-            aria-label="채팅 접기"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-        )}
       </div>
-    </div>
+    </aside>
   );
 }

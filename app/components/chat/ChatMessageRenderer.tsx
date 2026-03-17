@@ -1,11 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { ChartConfig } from "../../types";
 import ChatRecommendations from "./ChatRecommendations";
+import ChatChart from "./ChatChart";
 
 type TextBlock = { type: "text"; content: string };
 type RecoBlock = { type: "recommendations"; items: string[] };
-type ChatContentBlock = TextBlock | RecoBlock;
+type ChartBlock = { type: "chart"; config: ChartConfig };
+type ChatContentBlock = TextBlock | RecoBlock | ChartBlock;
 
 type Props = {
   blocks: ChatContentBlock[];
@@ -60,6 +63,8 @@ export default function ChatMessageRenderer({ blocks, onRecommendationSelect }: 
                 {renderTextBlock(block.content)}
               </div>
             );
+          case "chart":
+            return <ChatChart key={i} config={block.config} />;
           case "recommendations":
             return (
               <ChatRecommendations

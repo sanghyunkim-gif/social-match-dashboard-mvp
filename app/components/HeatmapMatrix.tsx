@@ -14,10 +14,10 @@ type HeatmapMatrixProps = {
 };
 
 const getHeatColor = (value: number, min: number, max: number) => {
-  if (max === min) return "rgba(31, 111, 95, 0.2)";
+  if (max === min) return "rgba(13, 148, 136, 0.2)";
   const ratio = (value - min) / (max - min);
   const intensity = 0.15 + ratio * 0.55;
-  return `rgba(31, 111, 95, ${intensity})`;
+  return `rgba(13, 148, 136, ${intensity})`;
 };
 
 export default function HeatmapMatrix({ title, weeks, metrics, series, onInfoChange }: HeatmapMatrixProps) {
@@ -94,7 +94,11 @@ export default function HeatmapMatrix({ title, weeks, metrics, series, onInfoCha
                     />
                     {isAnomaly && (
                       <span className="anomaly-badge" title={`z=${score.toFixed(2)}`}>
-                        !
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M10.29 3.86L1.82 18A2 2 0 003.64 21H20.36A2 2 0 0022.18 18L13.71 3.86A2 2 0 0010.29 3.86Z" />
+                          <line x1="12" y1="9" x2="12" y2="13" />
+                          <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
                       </span>
                     )}
                   </div>

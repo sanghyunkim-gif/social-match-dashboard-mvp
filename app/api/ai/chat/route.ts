@@ -100,6 +100,25 @@ ${metricsBlock}
 - 추세 분석, 변동 원인 추정, 액션 아이템을 포함
 - 간결하고 명확하게 답변
 ${contextBlock}
+## 차트 시각화
+사용자가 도식화, 차트, 그래프를 요청하면 다음 형식의 차트 블록을 응답에 포함하세요:
+\`\`\`chart
+{
+  "type": "line",
+  "title": "차트 제목",
+  "labels": ["1주차", "2주차", "3주차"],
+  "datasets": [
+    { "name": "시리즈명", "values": [100, 95, 88] }
+  ],
+  "yAxis": "Y축 라벨 (%)"
+}
+\`\`\`
+- type은 "line" 또는 "bar"
+- datasets에 여러 시리즈를 넣을 수 있음
+- 값이 없으면 null 사용
+- 차트 블록 앞뒤에 설명 텍스트를 함께 작성하세요
+- 하나의 응답에 차트를 최대 2개까지 포함 가능
+
 ## 응답 가이드
 - 한국어로 답변하세요
 - 친절하지만 간결하게 대화하세요
@@ -110,6 +129,7 @@ function parseAiResponse(text: string) {
   let reply = text;
   let action = undefined;
   let recommendations: string[] = [];
+  const charts: { type: string; title: string; labels: string[]; datasets: { name: string; values: (number | null)[] }[]; yAxis?: string }[] = [];
 
   // Parse action JSON block
   const actionRegex = /```json:action\s*\n([\s\S]*?)\n```/;
@@ -123,6 +143,19 @@ function parseAiResponse(text: string) {
     }
   }
 
+  // Parse chart blocks
+  const chartRegex = /```chart\s*\n([\s\S]*?)\n```/g;
+  let chartMatch;
+  while ((chartMatch = chartRegex.exec(reply)) !== null) {
+    try {
+      const parsed = JSON.parse(chartMatch[1]);
+      charts.push(parsed);
+    } catch {
+      // ignore parse error
+    }
+  }
+  reply = reply.replace(/```chart\s*\n[\s\S]*?\n```/g, "").trim();
+
   // Parse recommendations
   const recoSplit = reply.split("---추천---");
   if (recoSplit.length > 1) {
@@ -134,7 +167,7 @@ function parseAiResponse(text: string) {
       .filter(Boolean);
   }
 
-  return { reply, action, recommendations };
+  return { reply, action, recommendations, charts };
 }
 
 function buildFallback(
@@ -234,9 +267,9 @@ export async function POST(request: Request) {
         ? response.content[0].text
         : "응답을 생성하지 못했습니다.";
 
-    const { reply, action, recommendations } = parseAiResponse(rawReply);
+    const { reply, action, recommendations, charts } = parseAiResponse(rawReply);
 
-    return NextResponse.json({ reply, action, recommendations });
+    return NextResponse.json({ reply, action, recommendations, charts });
   } catch (error) {
     return NextResponse.json(
       { error: (error as Error).message || "Failed to build reply." },

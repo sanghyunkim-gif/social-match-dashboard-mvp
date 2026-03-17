@@ -226,22 +226,25 @@ export default function ControlBar({
       </div>
 
       <div className="search-row search-row-main">
-        <label className="field search-field search-field-period-unit">
-          <span className="field-label">기간단위</span>
-          <select value={periodUnit} disabled>
-            <option value="week">주</option>
-          </select>
-        </label>
-        <label className="field search-field search-field-period-range">
-          <span className="field-label">기간범위</span>
-          <select value={periodRangeValue} onChange={(event) => onPeriodRangeChange(event.target.value)}>
-            {periodRangeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="filter-group-period">
+          <label className="field search-field search-field-period-unit">
+            <span className="field-label">기간단위</span>
+            <select value={periodUnit} disabled>
+              <option value="week">주</option>
+            </select>
+          </label>
+          <label className="field search-field search-field-period-range">
+            <span className="field-label">기간범위</span>
+            <select value={periodRangeValue} onChange={(event) => onPeriodRangeChange(event.target.value)}>
+              {periodRangeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="filter-divider" />
         <label className="field search-field search-field-measurement-select">
           <span className="field-label">측정단위</span>
           <select value={measurementUnit} onChange={(event) => onMeasurementUnitChange(event.target.value)}>

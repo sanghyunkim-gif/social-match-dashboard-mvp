@@ -35,13 +35,13 @@ const formatDelta = (metric: Metric, delta: number | null) => {
 };
 
 const getHeatColor = (values: number[], value: number) => {
-  if (!values.length) return "rgba(37, 99, 235, 0.04)";
+  if (!values.length) return "rgba(13, 148, 136, 0.04)";
   const min = Math.min(...values);
   const max = Math.max(...values);
-  if (min === max) return "rgba(37, 99, 235, 0.08)";
+  if (min === max) return "rgba(13, 148, 136, 0.08)";
   const ratio = (value - min) / (max - min);
   const intensity = 0.04 + ratio * 0.25;
-  return `rgba(37, 99, 235, ${intensity})`;
+  return `rgba(13, 148, 136, ${intensity})`;
 };
 
 export default function EntityMetricTable({
@@ -138,6 +138,10 @@ export default function EntityMetricTable({
       </div>
       {drilldownPathItems.length > 0 && (
         <div className="drilldown-path" aria-label="드릴다운 경로">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="drilldown-home-icon">
+            <path d="M3 12L12 3L21 12" />
+            <path d="M5 10V20H19V10" />
+          </svg>
           {drilldownPathItems.map((item, index) => (
             <span key={`${item.label}-${index}`} className="drilldown-path-item">
               {item.isCurrent || !onDrilldownNavigate ? (
@@ -151,7 +155,11 @@ export default function EntityMetricTable({
                   {item.label}
                 </button>
               )}
-              {index < drilldownPathItems.length - 1 && <span className="drilldown-sep">&gt;</span>}
+              {index < drilldownPathItems.length - 1 && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="drilldown-sep-icon">
+                  <polyline points="9 6 15 12 9 18" />
+                </svg>
+              )}
             </span>
           ))}
         </div>
@@ -261,7 +269,13 @@ export default function EntityMetricTable({
                   >
                     {isFirst && onEntitySelect ? (
                       <div className="entity-cell-wrap" ref={isExpanded ? drilldownMenuRef : undefined}>
-                        <span className="name-title">{entity.name}</span>
+                        <span className="name-title">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="entity-icon">
+                            <path d="M20 21V19C20 16.79 18.21 15 16 15H8C5.79 15 4 16.79 4 19V21" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          {entity.name}
+                        </span>
                         {isExpanded && (
                           <div
                             className="entity-drilldown-menu entity-filter-menu"

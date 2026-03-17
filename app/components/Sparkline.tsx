@@ -15,7 +15,7 @@ export default function Sparkline({
   values,
   width = 120,
   height = 28,
-  stroke = "#4F46E5",
+  stroke = "#0D9488",
   labels = [],
   formatValue
 }: SparklineProps) {
@@ -102,7 +102,7 @@ export default function Sparkline({
       <svg className="sparkline" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="sparkline">
         {path && <path d={path} fill="none" strokeWidth="2" strokeLinecap="round" stroke={stroke} />}
         {trendPath && (
-          <path d={trendPath} fill="none" strokeWidth="1.4" strokeLinecap="round" stroke="#94a3b8" strokeDasharray="3 3" />
+          <path d={trendPath} fill="none" strokeWidth="1.4" strokeLinecap="round" stroke="#94A3B8" strokeDasharray="3 3" />
         )}
         {hoverIndex !== null && points[hoverIndex] && (
           <circle cx={points[hoverIndex].x} cy={points[hoverIndex].y} r="3.5" fill={stroke} />

@@ -95,8 +95,17 @@ export type AiChatAvailableOptions = {
   metricOptions: { id: string; name: string }[];
 };
 
+export type ChartConfig = {
+  type: "line" | "bar";
+  title: string;
+  labels: string[];
+  datasets: { name: string; values: (number | null)[] }[];
+  yAxis?: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  charts?: ChartConfig[];
 };

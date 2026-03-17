@@ -266,6 +266,7 @@ export default function Home() {
   const [userName, setUserName] = useState<string | null>(null);
 
   const [autoSearchPending, setAutoSearchPending] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(true);
 
   const measurementUnitLabelMap = useMemo(
     () =>
@@ -990,9 +991,13 @@ export default function Home() {
   }, [showResults, weeks, selectedMetrics, seriesByEntity, appliedMeasurementUnit, appliedFilterValue, measurementUnitLabelMap]);
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell${isChatOpen ? " chat-open" : ""}`}>
       <header className="app-header">
         <div className="brand">
+          <svg className="brand-mark" width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <rect width="36" height="36" rx="10" fill="var(--primary)" />
+            <path d="M10 26V10L18 18L26 10V26" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
           <div>
             <h1>
               <a className="brand-link" href="/">
@@ -1115,7 +1120,14 @@ export default function Home() {
         {isLoadingBase ? (
           <div className="card subtle">지표 정보를 불러오는 중...</div>
         ) : !showResults && !isLoadingHeatmap ? (
-          <div className="card subtle">옵션을 선택하고 조회를 눌러주세요.</div>
+          <div className="card subtle empty-state">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true" className="empty-state-icon">
+              <rect x="6" y="6" width="36" height="36" rx="8" stroke="currentColor" strokeWidth="1.5" fill="none" />
+              <path d="M14 30L20 22L26 26L34 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              <circle cx="34" cy="18" r="2" fill="currentColor" />
+            </svg>
+            <span>옵션을 선택하고 조회를 눌러주세요.</span>
+          </div>
         ) : !isLoadingHeatmap && showResults ? (
           <div className="result-stack">
             {appliedMeasurementUnit === "all" ? (
@@ -1158,6 +1170,8 @@ export default function Home() {
         onApplyFilters={handleAiApplyFilters}
         dashboardContext={chatContext}
         availableOptions={aiAvailableOptions}
+        isOpen={isChatOpen}
+        onToggle={() => setIsChatOpen((prev) => !prev)}
       />
 
       {isMetricPickerOpen && (
