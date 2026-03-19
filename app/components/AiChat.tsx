@@ -37,7 +37,7 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
   const messages = activeSession.messages;
@@ -359,15 +359,22 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
       )}
 
       <div className="ai-panel-input-area">
-        <input
+        <textarea
           ref={inputRef}
-          type="text"
           className="ai-panel-input"
           value={input}
           placeholder="데이터를 질문하세요..."
-          onChange={(e) => setInput(e.target.value)}
+          rows={1}
+          onChange={(e) => {
+            setInput(e.target.value);
+            e.target.style.height = "auto";
+            e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) sendMessage(input);
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              sendMessage(input);
+            }
           }}
           disabled={isLoading}
         />
