@@ -299,7 +299,7 @@ export async function POST(request: Request) {
     const systemPrompt = buildSystemPrompt(availableOptions, dashboardContext);
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-opus-4-6",
       max_tokens: 4096,
       system: systemPrompt,
       messages: messages.map((m) => ({
