@@ -196,6 +196,8 @@ const pickDefaultMetricIds = (metricIds: string[]) => {
   return metricIds.slice(0, Math.min(metricIds.length, 6));
 };
 
+const MAX_ENTITY_ROWS = 50;
+
 const buildContext = (
   weeks: string[],
   metrics: Metric[],
@@ -219,12 +221,35 @@ const buildContext = (
     return { metricId: metric.id, name: metric.name, latest, delta, format: metric.format };
   });
 
+  // 전체(집계) 시계열 데이터
+  const aggregateSeries = seriesByEntity[ALL_LABEL] ?? {};
+  const metricSeries = metrics.map((metric) => ({
+    metricId: metric.id,
+    name: metric.name,
+    values: aggregateSeries[metric.id] ?? [],
+    format: metric.format,
+  }));
+
+  // 엔티티별 시계열 데이터 (전체 행 제외, 최대 MAX_ENTITY_ROWS개)
+  const entitySeries = Object.entries(seriesByEntity)
+    .filter(([key]) => key !== ALL_LABEL)
+    .slice(0, MAX_ENTITY_ROWS)
+    .map(([entityName, entityMetrics]) => ({
+      entityName,
+      metrics: metrics.map((metric) => ({
+        metricId: metric.id,
+        values: entityMetrics[metric.id] ?? [],
+      })),
+    }));
+
   return {
     unit: unitName,
     filter: filterValue,
     weeks,
     primaryMetricId: primaryMetricId ?? "",
-    metricSummaries
+    metricSummaries,
+    metricSeries,
+    entitySeries,
   };
 };
 
@@ -569,7 +594,6 @@ export default function Home() {
     setIsLoadingHeatmap(true);
     setIsFetching(true);
     setErrorMessage(null);
-    setSummary(null);
 
     try {
       const weeksResponse = await fetchJson<{ weeks: string[] }>(`/api/weeks?n=${size}`, {
@@ -640,7 +664,6 @@ export default function Home() {
       }
     } finally {
       setIsLoadingHeatmap(false);
-      setIsSummaryLoading(false);
       setIsFetching(false);
     }
   };
@@ -1158,8 +1181,6 @@ export default function Home() {
               실행취소
             </button>
           </div>
-        )}
-
         )}
 
         {isLoadingBase ? (
