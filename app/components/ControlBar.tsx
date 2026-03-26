@@ -30,9 +30,12 @@ type ControlBarProps = {
   activeTemplateId: string | null;
   onApplyTemplate: (template: FilterTemplate) => void;
   onSaveTemplate: (name: string, isShared: boolean, isDefault: boolean) => void;
+  onCreateEmptyTab: (name: string) => void;
+  onUpdateTemplateConfig: (id: string) => void;
   onDeleteTemplate: (id: string) => void;
   onRenameTemplate: (id: string, name: string) => void;
   onSetDefaultTemplate: (id: string) => void;
+  onSaveDefaultConfig: () => void;
   onResetFilters: () => void;
   onApplyDefault: () => void;
 };
@@ -58,16 +61,15 @@ export default function ControlBar({
   activeTemplateId,
   onApplyTemplate,
   onSaveTemplate,
+  onCreateEmptyTab,
+  onUpdateTemplateConfig,
   onDeleteTemplate,
   onRenameTemplate,
   onSetDefaultTemplate,
+  onSaveDefaultConfig,
   onResetFilters,
   onApplyDefault
 }: ControlBarProps) {
-  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
-  const [saveName, setSaveName] = useState("");
-  const [saveIsShared, setSaveIsShared] = useState(false);
-  const [saveIsDefault, setSaveIsDefault] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [contextMenuId, setContextMenuId] = useState<string | null>(null);
@@ -84,15 +86,6 @@ export default function ControlBar({
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [contextMenuId]);
-
-  const handleSave = () => {
-    if (!saveName.trim()) return;
-    onSaveTemplate(saveName.trim(), saveIsShared, saveIsDefault);
-    setSaveName("");
-    setSaveIsShared(false);
-    setSaveIsDefault(false);
-    setIsSaveDialogOpen(false);
-  };
 
   const handleRename = (id: string) => {
     if (!editingName.trim()) return;
@@ -134,7 +127,7 @@ export default function ControlBar({
           className={`template-tab template-tab-default ${activeTemplateId === null ? "is-active" : ""}`}
           onClick={onApplyDefault}
         >
-          기본
+          새 탭
         </button>
         {templates.map((template) => (
           <div key={template.id} className="template-tab-wrap" style={{ position: "relative" }}>
@@ -160,11 +153,12 @@ export default function ControlBar({
                 type="button"
                 className={`template-tab ${template.id === activeTemplateId ? "is-active" : ""}`}
                 onClick={() => onApplyTemplate(template)}
+                onDoubleClick={() => { setEditingId(template.id); setEditingName(template.name); }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   setContextMenuId(template.id);
                 }}
-                title={`${template.name}${template.is_default ? " (기본)" : ""}${template.is_shared ? " (공유)" : ""} — 우클릭: 관리`}
+                title={`${template.name}${template.is_default ? " (기본)" : ""}${template.is_shared ? " (공유)" : ""} — 더블클릭: 이름 수정, 우클릭: 관리`}
               >
                 <span className="template-tab-name">{template.name}</span>
                 {template.is_default && <span className="template-tab-badge">기본</span>}
@@ -210,10 +204,25 @@ export default function ControlBar({
         <button
           type="button"
           className="template-tab template-tab-add"
-          onClick={() => setIsSaveDialogOpen(true)}
-          title="현재 필터를 템플릿으로 생성"
+          onClick={() => onCreateEmptyTab(`탭 ${templates.length + 1}`)}
+          title="새 탭 추가"
         >
           +
+        </button>
+        <div className="template-tabs-spacer" />
+        <button
+          type="button"
+          className="template-save-btn"
+          onClick={() => {
+            if (activeTemplateId) {
+              onUpdateTemplateConfig(activeTemplateId);
+            } else {
+              onSaveDefaultConfig();
+            }
+          }}
+          title={activeTemplateId ? "현재 탭에 필터 상태 저장" : "새 탭에 현재 상태 저장"}
+        >
+          저장하기
         </button>
       </div>
       <div className="search-panel card control-bar-body">
@@ -235,9 +244,6 @@ export default function ControlBar({
             </button>
           ))}
         </div>
-        <button type="button" className="clear-metrics-btn" onClick={onClearSelectedMetrics}>
-          전체 해제
-        </button>
       </div>
 
       <div className="search-row search-row-main">
@@ -292,67 +298,6 @@ export default function ControlBar({
 
       </div>
 
-      {isSaveDialogOpen && (
-        <div className="template-save-overlay" onClick={() => setIsSaveDialogOpen(false)}>
-          <div className="template-save-dialog" onClick={(event) => event.stopPropagation()}>
-            <div className="template-save-header">
-              <span className="card-title">템플릿 생성</span>
-              <button
-                type="button"
-                className="template-save-close"
-                onClick={() => setIsSaveDialogOpen(false)}
-              >
-                닫기
-              </button>
-            </div>
-            <div className="template-save-body">
-              <label className="field">
-                <input
-                  type="text"
-                  value={saveName}
-                  onChange={(event) => setSaveName(event.target.value)}
-                  placeholder="템플릿 이름을 입력해 주세요."
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") handleSave();
-                  }}
-                  autoFocus
-                />
-              </label>
-              <div className="template-save-options">
-                <label className="template-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={saveIsShared}
-                    onChange={(event) => setSaveIsShared(event.target.checked)}
-                  />
-                  <span>전체 공유</span>
-                </label>
-                <label className="template-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={saveIsDefault}
-                    onChange={(event) => setSaveIsDefault(event.target.checked)}
-                  />
-                  <span>기본 템플릿으로 설정</span>
-                </label>
-              </div>
-            </div>
-            <div className="template-save-footer">
-              <button type="button" className="btn-ghost" onClick={() => setIsSaveDialogOpen(false)}>
-                취소
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={handleSave}
-                disabled={!saveName.trim()}
-              >
-                저장
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

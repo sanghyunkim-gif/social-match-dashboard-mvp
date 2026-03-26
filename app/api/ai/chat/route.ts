@@ -124,7 +124,7 @@ ${entityTable}
 `;
   }
 
-  return `당신은 플랩풋볼(PLAB) 대시보드의 AI 어시스턴트 KEVIN입니다.
+  return `당신은 플랩풋볼(PLAB) 대시보드의 AI 어시스턴트 Kevin입니다.
 사용자와 대화하면서 데이터를 분석하고, 대시보드 필터를 자동으로 설정합니다.
 ${contextBlock}
 ## 핵심 규칙

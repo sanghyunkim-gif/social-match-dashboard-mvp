@@ -54,14 +54,14 @@ export default function MainTrendChart({ metric, weeks, values }: MainTrendChart
         <span>기간: {weeks[0]} ~ {weeks[weeks.length - 1]}</span>
       </div>
       <svg viewBox="0 0 520 120" className="chart-svg" role="img" aria-label={metric.name}>
-        <path d={path} fill="none" stroke="#1f6f5f" strokeWidth="2" />
+        <path d={path} fill="none" stroke="#1C2C5B" strokeWidth="2" />
         {values.map((value, index) => {
           const min = Math.min(...values);
           const max = Math.max(...values);
           const range = max - min || 1;
           const x = (index / (values.length - 1 || 1)) * 520;
           const y = 120 - ((value - min) / range) * 120;
-          return <circle key={index} cx={x} cy={y} r="3" fill="#d06a3c" />;
+          return <circle key={index} cx={x} cy={y} r="3" fill="#D4A843" />;
         })}
       </svg>
     </div>

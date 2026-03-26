@@ -337,6 +337,7 @@ export default function Home() {
   const abortRef = useRef<AbortController | null>(null);
   const [templates, setTemplates] = useState<FilterTemplate[]>([]);
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+  const [defaultTabConfig, setDefaultTabConfig] = useState<FilterTemplateConfig | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
 
   const [autoSearchPending, setAutoSearchPending] = useState(false);
@@ -1044,9 +1045,7 @@ export default function Home() {
     setDrilldownParent(null);
     setAppliedDrilldownHistory([]);
     setPendingDrilldown(null);
-    if (config.selectedMetricIds?.length) {
-      setSelectedMetricIds(config.selectedMetricIds);
-    }
+    setSelectedMetricIds(config.selectedMetricIds ?? []);
     setActiveTemplateId(template.id);
   };
 
@@ -1072,6 +1071,54 @@ export default function Home() {
       await loadTemplates();
     } catch (error) {
       pushError("템플릿 생성 실패", (error as Error).message);
+    }
+  };
+
+  const handleCreateEmptyTab = async (name: string) => {
+    const config: FilterTemplateConfig = {
+      periodRangeValue: "recent_8",
+      measurementUnit: "all",
+      filterValue: ALL_VALUE,
+      selectedMetricIds: []
+    };
+    try {
+      const response = await fetchJson<{ template: FilterTemplate }>("/api/filter-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, config, is_shared: false, is_default: false })
+      });
+      setActiveTemplateId(response.template.id);
+      await loadTemplates();
+    } catch (error) {
+      pushError("탭 생성 실패", (error as Error).message);
+    }
+  };
+
+  const handleSaveDefaultConfig = () => {
+    setDefaultTabConfig({
+      periodRangeValue: effectivePeriodRangeValue,
+      measurementUnit,
+      filterValue,
+      selectedMetricIds
+    });
+  };
+
+  const handleUpdateTemplateConfig = async (id: string) => {
+    const config: FilterTemplateConfig = {
+      periodRangeValue: effectivePeriodRangeValue,
+      measurementUnit,
+      filterValue,
+      selectedMetricIds
+    };
+    try {
+      await fetchJson(`/api/filter-templates/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config })
+      });
+      await loadTemplates();
+    } catch (error) {
+      pushError("템플릿 저장 실패", (error as Error).message);
     }
   };
 
@@ -1192,6 +1239,8 @@ export default function Home() {
           activeTemplateId={activeTemplateId}
           onApplyTemplate={handleApplyTemplate}
           onSaveTemplate={handleSaveTemplate}
+          onCreateEmptyTab={handleCreateEmptyTab}
+          onUpdateTemplateConfig={handleUpdateTemplateConfig}
           onDeleteTemplate={handleDeleteTemplate}
           onRenameTemplate={handleRenameTemplate}
           onSetDefaultTemplate={handleSetDefaultTemplate}
@@ -1206,15 +1255,27 @@ export default function Home() {
             setSelectedMetricIds([]);
             setActiveTemplateId(null);
           }}
+          onSaveDefaultConfig={handleSaveDefaultConfig}
           onApplyDefault={() => {
-            setPeriodRangeValue("recent_8");
-            setMeasurementUnit("all");
-            setFilterValue(ALL_VALUE);
-            setFilterSelectedValues([]);
+            if (defaultTabConfig) {
+              setPeriodRangeValue(defaultTabConfig.periodRangeValue ?? "recent_8");
+              setMeasurementUnit(defaultTabConfig.measurementUnit ?? "all");
+              const resolvedFilter = defaultTabConfig.filterValue ?? ALL_VALUE;
+              setFilterValue(resolvedFilter);
+              setFilterSelectedValues(resolvedFilter === ALL_VALUE ? [] : [resolvedFilter]);
+              if (defaultTabConfig.selectedMetricIds?.length) {
+                setSelectedMetricIds(defaultTabConfig.selectedMetricIds);
+              }
+            } else {
+              setPeriodRangeValue("recent_8");
+              setMeasurementUnit("all");
+              setFilterValue(ALL_VALUE);
+              setFilterSelectedValues([]);
+              setSelectedMetricIds([]);
+            }
             setDrilldownParent(null);
             setAppliedDrilldownHistory([]);
             setPendingDrilldown(null);
-            setSelectedMetricIds([]);
             setActiveTemplateId(null);
             setAutoSearchPending(true);
           }}

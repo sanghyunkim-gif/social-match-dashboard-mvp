@@ -100,7 +100,7 @@ export default function LoginPage() {
           {/* Branding */}
           <div style={styles.header}>
             <div style={styles.logoMark}>K</div>
-            <h1 style={styles.title}>KEVIN</h1>
+            <h1 style={styles.title}>Kevin</h1>
             <p style={styles.subtitle}>Social Match Dashboard</p>
           </div>
 
@@ -177,7 +177,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     minHeight: "100vh",
     padding: "24px",
-    background: "linear-gradient(160deg, #FAFBFC 0%, #F1F5F9 40%, #E2E8F0 100%)",
+    background: "linear-gradient(160deg, #F7F9FC 0%, #EDF1F8 40%, #E0E6F0 100%)",
     position: "relative",
     overflow: "hidden",
   },
@@ -188,7 +188,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: "600px",
     height: "600px",
     borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(13, 148, 136, 0.06) 0%, transparent 70%)",
+    background: "radial-gradient(circle, rgba(108, 171, 221, 0.08) 0%, transparent 70%)",
     pointerEvents: "none",
   },
   bgOrb2: {
@@ -198,7 +198,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: "500px",
     height: "500px",
     borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(13, 148, 136, 0.04) 0%, transparent 70%)",
+    background: "radial-gradient(circle, rgba(108, 171, 221, 0.06) 0%, transparent 70%)",
     pointerEvents: "none",
   },
   cardWrapper: {
@@ -210,12 +210,12 @@ const styles: Record<string, React.CSSProperties> = {
   accentBar: {
     height: "4px",
     borderRadius: "20px 20px 0 0",
-    background: "linear-gradient(90deg, var(--primary) 0%, #0F766E 50%, #14B8A6 100%)",
+    background: "linear-gradient(90deg, #1C2C5B 0%, #6CABDD 50%, #98C5E9 100%)",
   },
   card: {
     background: "var(--card)",
     borderRadius: "0 0 20px 20px",
-    boxShadow: "0 20px 60px rgba(15, 23, 42, 0.10), 0 8px 24px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.04)",
+    boxShadow: "0 20px 60px rgba(28, 44, 91, 0.10), 0 8px 24px rgba(28, 44, 91, 0.06), 0 2px 8px rgba(28, 44, 91, 0.04)",
     padding: "48px 44px 36px",
     display: "flex",
     flexDirection: "column",
@@ -232,7 +232,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: "48px",
     height: "48px",
     borderRadius: "14px",
-    background: "linear-gradient(135deg, var(--primary) 0%, #0F766E 100%)",
+    background: "linear-gradient(135deg, #6CABDD 0%, #1C2C5B 100%)",
     color: "#ffffff",
     fontFamily: "var(--font-display)",
     fontSize: "22px",
@@ -241,7 +241,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     marginBottom: "4px",
-    boxShadow: "0 4px 12px rgba(13, 148, 136, 0.25)",
+    boxShadow: "0 4px 12px rgba(108, 171, 221, 0.30)",
   },
   title: {
     fontFamily: "var(--font-display)",
@@ -294,12 +294,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   googleBtnHover: {
     borderColor: "var(--primary)",
-    boxShadow: "0 4px 16px rgba(13, 148, 136, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06)",
+    boxShadow: "0 4px 16px rgba(108, 171, 221, 0.12), 0 2px 6px rgba(28, 44, 91, 0.06)",
     transform: "scale(1.01)",
   },
   googleBtnActive: {
     transform: "scale(0.98)",
-    boxShadow: "0 2px 8px rgba(13, 148, 136, 0.08)",
+    boxShadow: "0 2px 8px rgba(108, 171, 221, 0.08)",
   },
   googleBtnDisabled: {
     background: "var(--bg-accent)",
