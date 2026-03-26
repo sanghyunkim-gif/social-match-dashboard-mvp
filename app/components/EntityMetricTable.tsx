@@ -72,8 +72,7 @@ export default function EntityMetricTable({
   const startWidthRef = useRef(0);
   const manualResized = useRef(new Set<number>());
   const gridRef = useRef<HTMLDivElement>(null);
-  const [isEntityFilterOpen, setIsEntityFilterOpen] = useState(false);
-  const entityFilterRef = useRef<HTMLDivElement | null>(null);
+  const [entitySortOrder, setEntitySortOrder] = useState<"asc" | "desc" | null>(null);
   const drilldownMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -103,9 +102,6 @@ export default function EntityMetricTable({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isEntityFilterOpen && entityFilterRef.current && !entityFilterRef.current.contains(event.target as Node)) {
-        setIsEntityFilterOpen(false);
-      }
       if (expandedEntityName && drilldownMenuRef.current && !drilldownMenuRef.current.contains(event.target as Node)) {
         onDrilldownClose?.();
       }
@@ -113,7 +109,7 @@ export default function EntityMetricTable({
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [expandedEntityName, isEntityFilterOpen, onDrilldownClose]);
+  }, [expandedEntityName, onDrilldownClose]);
 
   useLayoutEffect(() => {
     const grid = gridRef.current;
@@ -152,10 +148,25 @@ export default function EntityMetricTable({
     [columnWidths]
   );
 
+  const sortedEntities = useMemo(() => {
+    if (!entitySortOrder) return entities;
+    return [...entities].sort((a, b) => {
+      const cmp = a.name.localeCompare(b.name, "ko-KR");
+      return entitySortOrder === "asc" ? cmp : -cmp;
+    });
+  }, [entities, entitySortOrder]);
+
+  const toggleEntitySort = () => {
+    setEntitySortOrder((prev) => {
+      if (prev === null) return "asc";
+      if (prev === "asc") return "desc";
+      return null;
+    });
+  };
+
   return (
     <div className="card table-card">
       <div className="table-head-row">
-        <div className="card-title">엔티티별 지표 추이</div>
         {onShowDeltaChange && (
           <label className="table-toggle">
             <input
@@ -198,44 +209,42 @@ export default function EntityMetricTable({
       <div className="table-scroll">
         <div className="data-grid entity-grid" ref={gridRef}>
           <div className="data-row data-header" style={{ gridTemplateColumns } as CSSProperties}>
-            <div className="data-cell data-entity is-resizable entity-header-cell" ref={entityFilterRef}>
-              {onEntityFilterSelect ? (
-                <button
-                  type="button"
-                  className="entity-filter-trigger"
-                  onClick={() => setIsEntityFilterOpen((prev) => !prev)}
-                >
-                  엔티티
-                  <svg className="entity-filter-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <div className="data-cell data-entity is-resizable entity-header-cell">
+              <button
+                type="button"
+                className="entity-sort-trigger"
+                onClick={toggleEntitySort}
+              >
+                측정단위
+                <svg className="entity-sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M12 5V19"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={entitySortOrder ? 1 : 0.4}
+                  />
+                  {entitySortOrder === "desc" ? (
                     <path
-                      d="M4 6H20L14 13V18L10 20V13L4 6Z"
+                      d="M5 12L12 19L19 12"
                       stroke="currentColor"
                       strokeWidth="1.8"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
-                  </svg>
-                </button>
-              ) : (
-                "엔티티"
-              )}
-              {onEntityFilterSelect && isEntityFilterOpen && (
-                <div className="entity-filter-menu">
-                  {entityFilterOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`entity-filter-option ${entityFilterValue === option.value ? "is-active" : ""}`}
-                      onClick={() => {
-                        onEntityFilterSelect(option.value);
-                        setIsEntityFilterOpen(false);
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+                  ) : (
+                    <path
+                      d="M5 12L12 5L19 12"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity={entitySortOrder === "asc" ? 1 : 0.4}
+                    />
+                  )}
+                </svg>
+              </button>
               <button
                 type="button"
                 className="col-resizer"
@@ -244,7 +253,7 @@ export default function EntityMetricTable({
               />
             </div>
             <div className="data-cell data-metric is-resizable">
-              지표명
+              지표
               <button
                 type="button"
                 className="col-resizer"
@@ -273,7 +282,7 @@ export default function EntityMetricTable({
               </div>
             ))}
           </div>
-          {entities.flatMap((entity) => {
+          {sortedEntities.flatMap((entity) => {
             const series = seriesByEntity[entity.id] ?? {};
             return metrics.map((metric, index) => {
               const values = series[metric.id] ?? Array(weeks.length).fill(0);
@@ -342,7 +351,7 @@ export default function EntityMetricTable({
                     <Sparkline values={values} labels={weeks} formatValue={(value) => formatValue(value, metric)} />
                   </div>
                   {values.map((value, indexValue) => {
-                    const delta = indexValue < values.length - 1 ? value - values[indexValue + 1] : null;
+                    const delta = indexValue > 0 ? value - values[indexValue - 1] : null;
                     const deltaLabel = formatDelta(metric, delta);
                     return (
                       <div

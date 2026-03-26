@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import {
   FilterOption,
   FilterTemplate,
@@ -7,18 +7,19 @@ import {
   Metric,
   PeriodUnit
 } from "../types";
+import MultiSelectDropdown from "./MultiSelectDropdown";
 
 type ControlBarProps = {
   periodUnit: PeriodUnit;
-  periodRangeValue: string;
+  periodRangeValues: string[];
   periodRangeOptions: { label: string; value: string }[];
-  onPeriodRangeChange: (value: string) => void;
+  onPeriodRangeChange: (values: string[]) => void;
   measurementUnit: MeasurementUnit;
   measurementUnitOptions: MeasurementUnitOption[];
   onMeasurementUnitChange: (value: MeasurementUnit) => void;
   filterOptions: FilterOption[];
-  filterValue: string;
-  onFilterChange: (value: string) => void;
+  filterValues: string[];
+  onFilterChange: (values: string[]) => void;
   selectedMetrics: Metric[];
   onRemoveSelectedMetric: (metricId: string) => void;
   onClearSelectedMetrics: () => void;
@@ -38,14 +39,14 @@ type ControlBarProps = {
 
 export default function ControlBar({
   periodUnit,
-  periodRangeValue,
+  periodRangeValues,
   periodRangeOptions,
   onPeriodRangeChange,
   measurementUnit,
   measurementUnitOptions,
   onMeasurementUnitChange,
   filterOptions,
-  filterValue,
+  filterValues,
   onFilterChange,
   selectedMetrics,
   onRemoveSelectedMetric,
@@ -99,6 +100,29 @@ export default function ControlBar({
     setEditingId(null);
     setEditingName("");
   };
+
+  const periodRangeLabel = useMemo(() => {
+    if (periodRangeValues.length === 0) return "선택";
+    if (periodRangeValues.length === periodRangeOptions.length) return "전체";
+    return periodRangeOptions
+      .filter((o) => periodRangeValues.includes(o.value))
+      .map((o) => o.label)
+      .join(", ");
+  }, [periodRangeValues, periodRangeOptions]);
+
+  const filterDropdownOptions = useMemo(
+    () => filterOptions.filter((o) => o.value !== "all"),
+    [filterOptions]
+  );
+
+  const filterLabel = useMemo(() => {
+    if (filterValues.length === 0) return "선택";
+    if (filterValues.length === filterDropdownOptions.length) return "전체";
+    return filterDropdownOptions
+      .filter((o) => filterValues.includes(o.value))
+      .map((o) => o.label)
+      .join(", ");
+  }, [filterValues, filterDropdownOptions]);
 
   const currentUserId = templates.find((template) => template.id === activeTemplateId)?.user_id;
 
@@ -187,7 +211,6 @@ export default function ControlBar({
         <button type="button" className="btn-secondary search-metric-picker-btn" onClick={onOpenMetricPicker}>
           지표 선택
         </button>
-        <span className="field-label">활성 지표</span>
         <div className="selected-metric-chips">
           {selectedMetrics.map((metric) => (
             <button
@@ -215,16 +238,16 @@ export default function ControlBar({
               <option value="week">주</option>
             </select>
           </label>
-          <label className="field search-field search-field-period-range">
+          <div className="field search-field search-field-period-range">
             <span className="field-label">기간범위</span>
-            <select value={periodRangeValue} onChange={(event) => onPeriodRangeChange(event.target.value)}>
-              {periodRangeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <MultiSelectDropdown
+              options={periodRangeOptions}
+              selectedValues={periodRangeValues}
+              onChange={onPeriodRangeChange}
+              label={periodRangeLabel}
+              searchPlaceholder="기간 검색..."
+            />
+          </div>
         </div>
         <div className="filter-divider" />
         <label className="field search-field search-field-measurement-select">
@@ -237,16 +260,16 @@ export default function ControlBar({
             ))}
           </select>
         </label>
-        <label className="field search-field search-field-filter">
+        <div className="field search-field search-field-filter">
           <span className="field-label">필터</span>
-          <select value={filterValue} onChange={(event) => onFilterChange(event.target.value)}>
-            {filterOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          <MultiSelectDropdown
+            options={filterDropdownOptions}
+            selectedValues={filterValues}
+            onChange={onFilterChange}
+            label={filterLabel}
+            searchPlaceholder="필터 검색..."
+          />
+        </div>
         <button type="button" className="btn-ghost btn-reset" onClick={onResetFilters} title="필터 초기화">
           초기화
         </button>
@@ -274,12 +297,11 @@ export default function ControlBar({
             </div>
             <div className="template-save-body">
               <label className="field">
-                <span className="field-label">템플릿 이름</span>
                 <input
                   type="text"
                   value={saveName}
                   onChange={(event) => setSaveName(event.target.value)}
-                  placeholder="예: 경기 주간 분석"
+                  placeholder="템플릿 이름을 입력해 주세요."
                   onKeyDown={(event) => {
                     if (event.key === "Enter") handleSave();
                   }}

@@ -239,13 +239,13 @@ const buildContext = (
       ? computeAggregateFromEntities(entityEntries, metrics, weeks.length)
       : directSeries;
 
-  const latestIndex = 0;
+  const latestIndex = weeks.length - 1;
 
   const metricSummaries = metrics.map((metric) => {
     const values = series[metric.id] ?? [];
     const latest = values[latestIndex] ?? null;
     const delta =
-      values.length > 1 ? (values[latestIndex] ?? 0) - (values[latestIndex + 1] ?? 0) : null;
+      values.length > 1 ? (values[latestIndex] ?? 0) - (values[latestIndex - 1] ?? 0) : null;
     return { metricId: metric.id, name: metric.name, latest, delta, format: metric.format };
   });
 
@@ -266,8 +266,8 @@ const buildContext = (
   const primaryMetricIdForSort = metrics[0]?.id ?? null;
   const sortedEntityEntries = entityEntries.slice().sort((a, b) => {
     if (!primaryMetricIdForSort) return 0;
-    const aVal = a[1][primaryMetricIdForSort]?.[0] ?? 0;
-    const bVal = b[1][primaryMetricIdForSort]?.[0] ?? 0;
+    const aVal = a[1][primaryMetricIdForSort]?.[weeks.length - 1] ?? 0;
+    const bVal = b[1][primaryMetricIdForSort]?.[weeks.length - 1] ?? 0;
     return bVal - aVal;
   });
   const totalEntityCount = sortedEntityEntries.length;
@@ -294,12 +294,13 @@ const buildContext = (
 
 export default function Home() {
   const [periodUnit] = useState<PeriodUnit>("week");
-  const [periodRangeValue, setPeriodRangeValue] = useState("recent_8");
+  const [periodRangeValues, setPeriodRangeValues] = useState<string[]>(["recent_8"]);
   const [measurementUnit, setMeasurementUnit] = useState<MeasurementUnit>("all");
   const [measurementUnitOptions, setMeasurementUnitOptions] = useState<MeasurementUnitOption[]>([
     { value: "all", label: ALL_LABEL }
   ]);
   const [filterValue, setFilterValue] = useState(ALL_VALUE);
+  const [filterSelectedValues, setFilterSelectedValues] = useState<string[]>([]);
   const [appliedMeasurementUnit, setAppliedMeasurementUnit] = useState<MeasurementUnit>("all");
   const [appliedFilterValue, setAppliedFilterValue] = useState(ALL_VALUE);
 
@@ -350,6 +351,13 @@ export default function Home() {
     drilldownParent?.value,
     weeks.join("|")
   ]);
+
+  const effectivePeriodRangeValue = useMemo(() => {
+    if (periodRangeValues.length === 0) return "recent_8";
+    return periodRangeValues.reduce((max, v) =>
+      (periodRangeSizeMap[v] ?? 0) > (periodRangeSizeMap[max] ?? 0) ? v : max
+    );
+  }, [periodRangeValues]);
 
   const measurementUnitLabelMap = useMemo(
     () =>
@@ -498,13 +506,14 @@ export default function Home() {
       if (measurementUnit === "all") {
         setFilterOptions([{ label: ALL_LABEL, value: ALL_VALUE }]);
         setFilterValue(ALL_VALUE);
+        setFilterSelectedValues([]);
         return;
       }
 
       setIsLoadingFilter(true);
       setErrorMessage(null);
       try {
-        const size = periodRangeSizeMap[periodRangeValue] ?? 8;
+        const size = periodRangeSizeMap[effectivePeriodRangeValue] ?? 8;
         const weeksResponse = await fetchJsonWithTimeout<{ weeks: string[] }>(`/api/weeks?n=${size}`, 6000);
         const params = new URLSearchParams({ measureUnit: measurementUnit });
         (weeksResponse.weeks ?? []).forEach((week) => {
@@ -525,6 +534,7 @@ export default function Home() {
           { label: ALL_LABEL, value: ALL_VALUE },
           ...options.map((value) => ({ label: value, value }))
         ]);
+        setFilterSelectedValues(options);
       } catch (error) {
         if (!canceled) {
           const message = (error as Error).message;
@@ -542,7 +552,7 @@ export default function Home() {
     return () => {
       canceled = true;
     };
-  }, [measurementUnit, drilldownParent?.unit, drilldownParent?.value, periodRangeValue]);
+  }, [measurementUnit, drilldownParent?.unit, drilldownParent?.value, effectivePeriodRangeValue]);
 
   const selectedMetrics = useMemo(() => {
     const map = new Map(metrics.map((metric) => [metric.id, metric]));
@@ -627,7 +637,7 @@ export default function Home() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const size = periodRangeSizeMap[periodRangeValue] ?? 8;
+    const size = periodRangeSizeMap[effectivePeriodRangeValue] ?? 8;
     setIsLoadingHeatmap(true);
     setIsFetching(true);
     setErrorMessage(null);
@@ -636,7 +646,7 @@ export default function Home() {
       const weeksResponse = await fetchJson<{ weeks: string[] }>(`/api/weeks?n=${size}`, {
         signal: controller.signal
       });
-      const nextWeeks = (weeksResponse.weeks ?? []).slice().reverse();
+      const nextWeeks = weeksResponse.weeks ?? [];
       if (!nextWeeks.length) {
         setErrorMessage("조건에 맞는 주차 데이터가 없습니다.");
         pushError("조건에 맞는 주차 데이터가 없습니다.");
@@ -707,10 +717,12 @@ export default function Home() {
 
   // Handle AI filter apply
   const handleAiApplyFilters = useCallback((filters: FilterAction["filters"]) => {
-    if (filters.periodRangeValue) setPeriodRangeValue(filters.periodRangeValue);
+    if (filters.periodRangeValue) setPeriodRangeValues([filters.periodRangeValue]);
     if (filters.measurementUnit) setMeasurementUnit(filters.measurementUnit as MeasurementUnit);
     if (filters.filterValue) {
-      setFilterValue(filters.filterValue === "__ALL__" ? ALL_VALUE : filters.filterValue);
+      const resolved = filters.filterValue === "__ALL__" ? ALL_VALUE : filters.filterValue;
+      setFilterValue(resolved);
+      setFilterSelectedValues(resolved === ALL_VALUE ? [] : [resolved]);
     }
     if (filters.metricIds?.length) setSelectedMetricIds(filters.metricIds);
 
@@ -757,14 +769,14 @@ export default function Home() {
     setPendingDrilldown(null);
   };
 
-  const handleFilterChange = (value: string) => {
-    setFilterValue(value);
+  const handleFilterChange = (values: string[]) => {
+    setFilterSelectedValues(values);
     setDrilldownParent(null);
     setPendingDrilldown(null);
   };
 
-  const handlePeriodRangeChange = (value: string) => {
-    setPeriodRangeValue(value);
+  const handlePeriodRangeChange = (values: string[]) => {
+    setPeriodRangeValues(values);
   };
 
   const handleEntityClick = (entityName: string) => {
@@ -1029,9 +1041,11 @@ export default function Home() {
 
   const applyTemplateConfig = (template: FilterTemplate) => {
     const config = template.config as FilterTemplateConfig;
-    setPeriodRangeValue(config.periodRangeValue ?? "recent_8");
+    setPeriodRangeValues(config.periodRangeValue ? [config.periodRangeValue] : ["recent_8"]);
     setMeasurementUnit(config.measurementUnit ?? "all");
-    setFilterValue(config.filterValue ?? ALL_VALUE);
+    const resolvedFilter = config.filterValue ?? ALL_VALUE;
+    setFilterValue(resolvedFilter);
+    setFilterSelectedValues(resolvedFilter === ALL_VALUE ? [] : [resolvedFilter]);
     setDrilldownParent(null);
     setAppliedDrilldownHistory([]);
     setPendingDrilldown(null);
@@ -1048,7 +1062,7 @@ export default function Home() {
 
   const handleSaveTemplate = async (name: string, isShared: boolean, isDefault: boolean) => {
     const config: FilterTemplateConfig = {
-      periodRangeValue,
+      periodRangeValue: effectivePeriodRangeValue,
       measurementUnit,
       filterValue,
       selectedMetricIds
@@ -1102,6 +1116,12 @@ export default function Home() {
     }
   };
 
+  const displayedEntities = useMemo(() => {
+    if (filterSelectedValues.length === 0) return entities;
+    const allowed = new Set(filterSelectedValues);
+    return entities.filter((e) => allowed.has(e.name) || allowed.has(e.id));
+  }, [entities, filterSelectedValues]);
+
   const isSearchDisabled = isLoadingBase || isLoadingHeatmap;
 
   const chatContext = useMemo<ChatContext | null>(() => {
@@ -1121,14 +1141,10 @@ export default function Home() {
     <main className={`app-shell${isChatOpen ? " chat-open" : ""}`}>
       <header className="app-header">
         <div className="brand">
-          <svg className="brand-mark" width="24" height="24" viewBox="0 0 36 36" fill="none" aria-hidden="true">
-            <rect width="36" height="36" rx="10" fill="var(--primary)" />
-            <path d="M10 26V10L18 18L26 10V26" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          </svg>
           <div>
             <h1>
               <a className="brand-link" href="/">
-                KEVIN
+                Kevin
               </a>
             </h1>
             <p>지표 중심 분석을 위한 스마트 대시보드</p>
@@ -1162,14 +1178,14 @@ export default function Home() {
       <section className="top-controls-wrap">
         <ControlBar
           periodUnit={periodUnit}
-          periodRangeValue={periodRangeValue}
+          periodRangeValues={periodRangeValues}
           periodRangeOptions={periodRangeOptions}
           onPeriodRangeChange={handlePeriodRangeChange}
           measurementUnit={measurementUnit}
           measurementUnitOptions={measurementUnitOptions}
           onMeasurementUnitChange={handleMeasurementChange}
           filterOptions={filterOptions}
-          filterValue={filterValue}
+          filterValues={filterSelectedValues}
           onFilterChange={handleFilterChange}
           selectedMetrics={selectedMetrics}
           onRemoveSelectedMetric={handleRemoveSelectedMetric}
@@ -1185,9 +1201,10 @@ export default function Home() {
           onRenameTemplate={handleRenameTemplate}
           onSetDefaultTemplate={handleSetDefaultTemplate}
           onResetFilters={() => {
-            setPeriodRangeValue("recent_8");
+            setPeriodRangeValues(["recent_8"]);
             setMeasurementUnit("all");
             setFilterValue(ALL_VALUE);
+            setFilterSelectedValues([]);
             setDrilldownParent(null);
             setAppliedDrilldownHistory([]);
             setPendingDrilldown(null);
@@ -1195,9 +1212,10 @@ export default function Home() {
             setActiveTemplateId(null);
           }}
           onApplyDefault={() => {
-            setPeriodRangeValue("recent_8");
+            setPeriodRangeValues(["recent_8"]);
             setMeasurementUnit("all");
             setFilterValue(ALL_VALUE);
+            setFilterSelectedValues([]);
             setDrilldownParent(null);
             setAppliedDrilldownHistory([]);
             setPendingDrilldown(null);
@@ -1257,7 +1275,7 @@ export default function Home() {
             ) : (
               <EntityMetricTable
                 weeks={weeks}
-                entities={entities}
+                entities={displayedEntities}
                 metrics={selectedMetrics}
                 seriesByEntity={seriesByEntity}
                 showDelta={showDeltaValues}

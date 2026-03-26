@@ -772,6 +772,8 @@ main {
   top: calc(100% + 6px);
   left: 0;
   z-index: 50;
+  display: flex;
+  flex-direction: column;
   min-width: 220px;
   max-width: 260px;
 }
@@ -1031,23 +1033,229 @@ main {
   position: relative;
 }
 
-.entity-filter-trigger {
+.entity-sort-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
   cursor: pointer;
+  padding: 0;
 }
 
-.entity-filter-icon {
+.entity-sort-icon {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+/* --- MultiSelectDropdown --- */
+.ms-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.ms-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.ms-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-badge {
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 1px 5px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.ms-chevron {
+  color: var(--secondary);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.ms-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.ms-search-wrap {
+  padding: 8px 8px 4px;
+}
+
+.ms-search {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 12px;
+  outline: none;
+}
+
+.ms-search:focus {
+  border-color: var(--primary);
+}
+
+.ms-select-all {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ms-select-all:hover {
+  background: var(--bg-accent);
+}
+
+.ms-options {
+  overflow-y: auto;
+  max-height: 220px;
+  padding: 2px 6px 6px;
+}
+
+.ms-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  justify-content: flex-start;
+}
+
+.ms-option:hover {
+  background: var(--bg-accent);
+}
+
+.ms-option input[type="checkbox"] {
+  margin: 0 3px 0 0;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--primary);
   width: 14px;
   height: 14px;
+}
+
+.ms-option span {
+  min-width: 0;
+}
+
+.ms-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px;
+  text-align: center;
+}
+
+/* Sort section inside dropdown */
+.ms-sort-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
+.ms-sort-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.ms-sort-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.ms-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--border);
+  background: transparent;
   color: var(--secondary);
+  font-size: 11px;
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ms-sort-btn:hover {
+  background: var(--bg-accent);
+}
+
+.ms-sort-btn.is-active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+/* Table header context */
+.entity-header-cell .ms-trigger {
+  font-weight: 700;
+}
+
+/* ControlBar context */
+.search-field .ms-dropdown {
+  width: 100%;
+}
+
+.search-field .ms-trigger {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--card);
+  font-size: 13px;
+  justify-content: space-between;
+}
+
+.search-field .ms-trigger:hover {
+  border-color: var(--primary);
+}
+
+.search-field .ms-menu {
+  min-width: 160px;
 }
 
 .entity-filter-menu {
