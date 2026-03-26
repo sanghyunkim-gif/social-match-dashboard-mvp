@@ -254,8 +254,7 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
   if (!isOpen) {
     return (
       <button type="button" className="ai-panel-toggle-btn" onClick={onToggle} aria-label="AI 채팅 열기">
-        <img src="/ai-avatar.png" alt="AI" width={24} height={24} style={{ borderRadius: "50%" }} />
-        <span>AI</span>
+        AI
       </button>
     );
   }
@@ -264,9 +263,7 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
     <aside className="ai-side-panel">
       <div className="ai-panel-header">
         <div className="ai-panel-header-left">
-          <img src="/ai-avatar.png" alt="" className="ai-chat-header-avatar" width={24} height={24} />
-          <span className="ai-chat-header-title">KEVIN AI</span>
-          <span className="ai-chat-header-badge">Assistant</span>
+          <span className="ai-chat-header-title">AI</span>
         </div>
         <div className="ai-panel-header-actions">
           <button type="button" className="ai-panel-action-btn" onClick={handleNewSession} title="새 대화">
@@ -310,17 +307,12 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
       <div className="ai-panel-messages">
         {messages.length === 0 && (
           <div className="ai-chat-empty">
-            원하는 데이터를 자연어로 요청해보세요.
-            <br />
-            AI가 대시보드 필터를 자동으로 설정합니다.
+            Kevin AI에게 데이터 조회와 분석을 요청해 보세요.
           </div>
         )}
 
         {messages.map((msg) => (
           <div key={msg.id} className={`ai-chat-bubble ${msg.role}`}>
-            {msg.role === "assistant" && (
-              <img src="/ai-avatar.png" alt="" className="ai-bubble-avatar" width={24} height={24} />
-            )}
             <div className="ai-bubble-content">
               <ChatMessageRenderer
                 blocks={[
@@ -335,7 +327,6 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
 
         {isLoading && (
           <div className="ai-chat-bubble assistant">
-            <img src="/ai-avatar.png" alt="" className="ai-bubble-avatar" width={24} height={24} />
             <div className="ai-bubble-content">
               <div className="ai-agent-loading">
                 <div className="ai-typing"><span /><span /><span /></div>
@@ -363,7 +354,7 @@ export default function AiChat({ onApplyFilters, dashboardContext, availableOpti
           ref={inputRef}
           className="ai-panel-input"
           value={input}
-          placeholder="데이터를 질문하세요..."
+          placeholder=""
           rows={1}
           onChange={(e) => {
             setInput(e.target.value);
